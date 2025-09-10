@@ -8,6 +8,7 @@ pub async fn handler() -> impl IntoResponse {
             "status": "healthy",
             "timestamp": chrono::Utc::now().to_rfc3339(),
             "service": "todo_api",
+            "ozan": "kenan"
         })),
     )
 }
