@@ -1,0 +1,151 @@
+name: 🚀 Production Deployment
+
+# Trigger conditions - ne zaman çalışacak
+on:
+  push:
+    branches: [main, master]  # main/master branch'e push olduğunda
+  pull_request:
+    branches: [main, master]  # PR oluşturulduğunda (test için)
+  workflow_dispatch:          # Manual trigger için
+
+# Environment variables
+# Note: Secrets are validated at runtime, not at edit-time
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  SERVICE_NAME: todo-api
+  REGION: us-central1
+  
+jobs:
+  # 🧪 Test Stage - Önce her şeyi test et
+  test:
+    name: 🧪 Run Tests
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: todo_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      
+    - name: 🦀 Setup Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        profile: minimal
+        override: true
+        components: rustfmt, clippy
+        
+    - name: 📦 Cache Cargo dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-
+    
+    - name: 🔍 Check formatting
+      run: cargo fmt -- --check
+      
+    - name: 🔍 Run Clippy
+      run: cargo clippy -- -D warnings
+      
+    - name: 🧪 Run tests
+      env:
+        DATABASE_URL: postgres://postgres:postgres@localhost:5432/todo_test
+        JWT_SECRET: test-jwt-secret-key-for-github-actions-testing-purposes
+        HASHING_SECRET_KEY: test-hashing-secret-for-github-actions
+      run: |
+        cargo test --verbose
+        
+    - name: 🏗️ Build for production
+      run: cargo build --release
+
+  # 🚀 Deploy Stage - Test geçerse deploy et
+  deploy:
+    name: 🚀 Deploy to Cloud Run
+    runs-on: ubuntu-latest
+    needs: test  # Test job'ının başarıyla tamamlanmasını bekle
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'  # Sadece main branch'e push olduğunda
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      
+    - name: 🔐 Authenticate to Google Cloud
+      uses: google-github-actions/auth@v1
+      with:
+        # GCP_SA_KEY secret should contain the service account JSON key
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+        
+    - name: ⚙️ Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v1
+      
+    - name: 🔧 Configure Docker for GCR
+      run: gcloud auth configure-docker
+      
+    - name: 🏗️ Build Docker image
+      run: |
+        docker build -f Dockerfile.production -t gcr.io/$PROJECT_ID/$SERVICE_NAME:$GITHUB_SHA .
+        docker tag gcr.io/$PROJECT_ID/$SERVICE_NAME:$GITHUB_SHA gcr.io/$PROJECT_ID/$SERVICE_NAME:latest
+        
+    - name: 📤 Push to Container Registry
+      run: |
+        docker push gcr.io/$PROJECT_ID/$SERVICE_NAME:$GITHUB_SHA
+        docker push gcr.io/$PROJECT_ID/$SERVICE_NAME:latest
+        
+    - name: 🚀 Deploy to Cloud Run
+      run: |
+        gcloud run deploy $SERVICE_NAME \
+          --image gcr.io/$PROJECT_ID/$SERVICE_NAME:$GITHUB_SHA \
+          --platform managed \
+          --region $REGION \
+          --allow-unauthenticated \
+          --port 8080 \
+          --memory 512Mi \
+          --cpu 1 \
+          --concurrency 80 \
+          --timeout 300 \
+          --min-instances 0 \
+          --max-instances 10 \
+          --set-env-vars="GCP_PROJECT_ID=$PROJECT_ID,RUST_LOG=info" \
+          --quiet
+          
+    - name: 🌐 Get service URL
+      run: |
+        SERVICE_URL=$(gcloud run services describe $SERVICE_NAME --region $REGION --format 'value(status.url)')
+        echo "🎉 Deployment successful!"
+        echo "🌐 Service URL: $SERVICE_URL"
+        echo "🏥 Health check: $SERVICE_URL/health"
+
+  # 📊 Post-deployment checks
+  health-check:
+    name: 🏥 Health Check
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    steps:
+    - name: 🏥 Wait for service to be ready
+      run: sleep 30
+      
+    - name: 🏥 Health check
+      run: |
+        SERVICE_URL=$(gcloud run services describe ${{ env.SERVICE_NAME }} --region ${{ env.REGION }} --format 'value(status.url)')
+        curl -f $SERVICE_URL/health || exit 1
+        echo "✅ Health check passed!"

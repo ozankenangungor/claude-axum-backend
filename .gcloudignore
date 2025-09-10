@@ -1,0 +1,51 @@
+# Git ve version control
+.git
+.gitignore
+README.md
+
+# Build artifacts (but NOT Cargo.lock - needed for reproducible builds)
+target/
+
+# Development files
+.env
+.env.local
+.env.development
+.env.production
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+
+# Documentation files
+docs/
+README.md
+TESTING.md
+DEPLOYMENT.md
+PRODUCTION_READINESS_REPORT.md
+CLOUD_RUN_SUMMARY.md
+
+# Test files - exclude from cloud build
+tests/
+test_data/
+benches/
+scripts/
+.coveragerc
+
+# Backup files
+*.bak
+*.tmp

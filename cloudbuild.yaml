@@ -1,0 +1,42 @@
+steps:
+  # Build the container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-f', 'Dockerfile.production', '-t', 'gcr.io/$PROJECT_ID/todo-api', '.']
+
+  # Push the container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/todo-api']
+
+  # Deploy to Cloud Run
+  - name: 'gcr.io/cloud-builders/gcloud'
+    args:
+      - 'run'
+      - 'deploy'
+      - 'todo-api'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/todo-api'
+      - '--region'
+      - 'us-central1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      
+      # We only need to provide the Project ID so the SDK knows where to look for secrets.
+      - '--set-env-vars'
+      - 'GCP_PROJECT_ID=$PROJECT_ID,RUST_LOG=info'
+      
+      # Performance and scaling configuration
+      - '--memory'
+      - '512Mi'
+      - '--cpu'
+      - '1'
+      - '--min-instances'
+      - '0'
+      - '--max-instances'
+      - '10'
+      - '--timeout'
+      - '300'
+
+# Store built images
+images:
+  - 'gcr.io/$PROJECT_ID/todo-api'

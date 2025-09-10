@@ -1,0 +1,63 @@
+# Production-ready Multi-stage Dockerfile for Google Cloud Run
+# Stage 1: Build environment with Rust compiler
+FROM rust:1.82-bullseye AS builder
+
+# Install dependencies for building
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    libclang-dev \
+    clang \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /usr/src/app
+
+# Copy dependency files first for better caching
+COPY Cargo.toml Cargo.lock ./
+COPY .sqlx ./.sqlx
+
+# Create dummy source to build dependencies
+RUN mkdir src && echo "fn main() {}" > src/main.rs
+RUN cargo build --release && rm src/main.rs
+
+# Copy actual source code
+COPY src ./src
+COPY build.rs ./
+COPY migrations ./migrations
+
+# Build the application
+RUN rm -f target/release/deps/todo_api*
+RUN cargo build --release
+
+# Stage 2: Minimal runtime image
+FROM debian:bullseye-slim
+
+# Create non-root user for security
+RUN groupadd -r appuser && useradd -r -g appuser appuser
+
+# Install runtime dependencies with security updates
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    && apt-get upgrade -y \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# Copy the built binary
+COPY --from=builder /usr/src/app/target/release/todo_api /usr/local/bin/todo_api
+
+# Change ownership to non-root user
+RUN chown appuser:appuser /usr/local/bin/todo_api
+
+# Switch to non-root user
+USER appuser
+
+# Set default environment variables
+ENV RUST_LOG=info
+
+# Cloud Run will set the PORT environment variable
+# Expose port (Cloud Run ignores this anyway)
+EXPOSE 8080
+
+# Run the application
+CMD ["todo_api"]

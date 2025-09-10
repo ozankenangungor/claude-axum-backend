@@ -1,0 +1,222 @@
+# 🔄 Multi-Environment Deployment Workflow
+
+name: 🚀 Multi-Environment Deploy
+
+on:
+  push:
+    branches: 
+      - main        # Production
+      - develop     # Staging
+      - 'feature/*' # Feature branches (dev deployment)
+  pull_request:
+    branches: [main, develop]
+
+# Environment variables
+# Note: Secrets are validated at runtime, not at edit-time
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  
+jobs:
+  # Determine which environment to deploy to
+  set-environment:
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.set-env.outputs.environment }}
+      service-name: ${{ steps.set-env.outputs.service-name }}
+      region: ${{ steps.set-env.outputs.region }}
+    steps:
+    - id: set-env
+      run: |
+        if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+          echo "environment=production" >> $GITHUB_OUTPUT
+          echo "service-name=todo-api" >> $GITHUB_OUTPUT
+          echo "region=us-central1" >> $GITHUB_OUTPUT
+        elif [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
+          echo "environment=staging" >> $GITHUB_OUTPUT
+          echo "service-name=todo-api-staging" >> $GITHUB_OUTPUT
+          echo "region=us-central1" >> $GITHUB_OUTPUT
+        else
+          echo "environment=development" >> $GITHUB_OUTPUT
+          echo "service-name=todo-api-dev-${{ github.run_number }}" >> $GITHUB_OUTPUT
+          echo "region=us-central1" >> $GITHUB_OUTPUT
+        fi
+
+  # Quality checks for all environments
+  quality-checks:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        profile: minimal
+        override: true
+        components: rustfmt, clippy
+    
+    - name: 🔍 Format check
+      run: cargo fmt -- --check
+      
+    - name: 🔍 Clippy check
+      run: cargo clippy -- -D warnings
+      
+    - name: 🏗️ Build check
+      run: cargo build --release
+
+  # Test stage
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: todo_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        profile: minimal
+        override: true
+    
+    - name: 🧪 Run tests
+      env:
+        DATABASE_URL: postgres://postgres:postgres@localhost:5432/todo_test
+        JWT_SECRET: test-jwt-secret-key-for-github-actions-testing-purposes-32-chars
+        HASHING_SECRET_KEY: test-hashing-secret-for-github-actions-16-chars
+      run: cargo test --verbose
+
+  # Deploy to appropriate environment
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [set-environment, quality-checks, test]
+    if: github.event_name == 'push'
+    environment: ${{ needs.set-environment.outputs.environment }}
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: 🔐 Authenticate to Google Cloud
+      uses: google-github-actions/auth@v1
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+        
+    - name: ⚙️ Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v1
+      
+    - name: 🔧 Configure Docker
+      run: gcloud auth configure-docker
+      
+    - name: 🏗️ Build Docker image
+      run: |
+        docker build -f Dockerfile.production \
+          -t gcr.io/${{ env.PROJECT_ID }}/${{ needs.set-environment.outputs.service-name }}:${{ github.sha }} \
+          -t gcr.io/${{ env.PROJECT_ID }}/${{ needs.set-environment.outputs.service-name }}:latest .
+        
+    - name: 📤 Push Docker image
+      run: |
+        docker push gcr.io/${{ env.PROJECT_ID }}/${{ needs.set-environment.outputs.service-name }}:${{ github.sha }}
+        docker push gcr.io/${{ env.PROJECT_ID }}/${{ needs.set-environment.outputs.service-name }}:latest
+        
+    - name: 🚀 Deploy to Cloud Run
+      run: |
+        # Set environment-specific configuration
+        if [[ "${{ needs.set-environment.outputs.environment }}" == "production" ]]; then
+          MEMORY="512Mi"
+          CPU="1"
+          MIN_INSTANCES="1"
+          MAX_INSTANCES="10"
+          LOG_LEVEL="info"
+        elif [[ "${{ needs.set-environment.outputs.environment }}" == "staging" ]]; then
+          MEMORY="256Mi"
+          CPU="0.5"
+          MIN_INSTANCES="0"
+          MAX_INSTANCES="5"
+          LOG_LEVEL="debug"
+        else
+          MEMORY="256Mi"
+          CPU="0.5"
+          MIN_INSTANCES="0"
+          MAX_INSTANCES="2"
+          LOG_LEVEL="debug"
+        fi
+        
+        gcloud run deploy ${{ needs.set-environment.outputs.service-name }} \
+          --image gcr.io/${{ env.PROJECT_ID }}/${{ needs.set-environment.outputs.service-name }}:${{ github.sha }} \
+          --platform managed \
+          --region ${{ needs.set-environment.outputs.region }} \
+          --allow-unauthenticated \
+          --port 8080 \
+          --memory $MEMORY \
+          --cpu $CPU \
+          --concurrency 80 \
+          --timeout 300 \
+          --min-instances $MIN_INSTANCES \
+          --max-instances $MAX_INSTANCES \
+          --set-env-vars="GCP_PROJECT_ID=${{ env.PROJECT_ID }},RUST_LOG=$LOG_LEVEL,ENVIRONMENT=${{ needs.set-environment.outputs.environment }}" \
+          --quiet
+          
+    - name: 🌐 Get service URL
+      id: deploy
+      run: |
+        SERVICE_URL=$(gcloud run services describe ${{ needs.set-environment.outputs.service-name }} \
+          --region ${{ needs.set-environment.outputs.region }} \
+          --format 'value(status.url)')
+        echo "url=$SERVICE_URL" >> $GITHUB_OUTPUT
+        echo "🎉 Deployment successful to ${{ needs.set-environment.outputs.environment }}!"
+        echo "🌐 Service URL: $SERVICE_URL"
+        echo "🏥 Health check: $SERVICE_URL/health"
+
+  # Post-deployment verification
+  verify:
+    runs-on: ubuntu-latest
+    needs: [deploy, set-environment]
+    if: github.event_name == 'push'
+    
+    steps:
+    - name: 🏥 Health check
+      run: |
+        SERVICE_URL=$(gcloud run services describe ${{ needs.set-environment.outputs.service-name }} \
+          --region ${{ needs.set-environment.outputs.region }} \
+          --format 'value(status.url)')
+        
+        # Wait for service to be ready
+        sleep 30
+        
+        # Health check
+        response=$(curl -s -o /dev/null -w "%{http_code}" $SERVICE_URL/health)
+        if [[ $response == "200" ]]; then
+          echo "✅ Health check passed!"
+          echo "🎉 ${{ needs.set-environment.outputs.environment }} deployment verified!"
+        else
+          echo "❌ Health check failed with status: $response"
+          exit 1
+        fi
+
+  # Clean up development deployments after 24 hours
+  cleanup-dev:
+    runs-on: ubuntu-latest
+    if: github.ref != 'refs/heads/main' && github.ref != 'refs/heads/develop' && github.event_name == 'push'
+    
+    steps:
+    - name: 🔐 Authenticate to Google Cloud
+      uses: google-github-actions/auth@v1
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+        
+    - name: ⚙️ Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v1
+      
+    - name: 🧹 Schedule cleanup
+      run: |
+        echo "Development deployment will be cleaned up automatically after 24 hours"
+        # Bu kısım için Google Cloud Scheduler kullanabilirsiniz

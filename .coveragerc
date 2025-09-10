@@ -1,0 +1,51 @@
+# Coverage configuration for the todo_api project
+# This configuration ensures comprehensive test coverage reporting
+
+[test]
+# Ensure all tests run with coverage data collection
+RUSTFLAGS = "-C instrument-coverage"
+LLVM_PROFILE_FILE = "coverage-%p-%m.profraw"
+
+[coverage]
+# Coverage settings
+exclude_files = [
+    "target/*",
+    "tests/*",
+    "benches/*",
+    "examples/*",
+]
+
+# Include source files
+include_files = [
+    "src/**/*.rs",
+]
+
+# Minimum coverage thresholds
+line_coverage_minimum = 80
+branch_coverage_minimum = 70
+function_coverage_minimum = 90
+
+[reporting]
+# Output formats
+formats = ["html", "lcov", "text"]
+
+# Output directory
+output_dir = "coverage/"
+
+# HTML settings
+html_title = "Todo API Test Coverage Report"
+html_description = "Comprehensive test coverage for the Rust Axum Todo API"
+
+[exclusions]
+# Exclude auto-generated code
+exclude_macros = true
+exclude_derives = true
+
+# Exclude specific patterns
+exclude_patterns = [
+    ".*Debug.*",
+    ".*Clone.*",
+    ".*PartialEq.*",
+    ".*Serialize.*",
+    ".*Deserialize.*",
+]
