@@ -19,7 +19,7 @@ impl ErrorResponse {
         }
     }
 
-    pub fn from_str(error: &str) -> Self {
+    pub fn new_from_str(error: &str) -> Self {
         Self {
             message: error.to_string(),
         }
@@ -29,7 +29,7 @@ impl ErrorResponse {
 // JWT Claims struct for authentication
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Claims {
-    pub sub: i32,  // user_id
+    pub sub: i32, // user_id
     pub username: String,
     pub exp: usize,
 }

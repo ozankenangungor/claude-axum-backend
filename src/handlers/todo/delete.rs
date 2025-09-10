@@ -16,16 +16,13 @@ pub async fn handler(
     Extension(user): Extension<ContextUser>,
     Path(id): Path<u64>,
 ) -> impl IntoResponse {
-    match todo_service.delete(user.user_id as i32, id as i32).await {
+    match todo_service.delete(user.user_id, id as i32).await {
         Ok(_) => (StatusCode::OK, Json(JsonResponse::Success(true))),
         Err(error) => {
-            if matches!(
-                error,
-                service::todo::Error::TodoNotFound
-            ) {
+            if matches!(error, service::todo::Error::TodoNotFound) {
                 return (
                     StatusCode::NOT_FOUND,
-                    Json(JsonResponse::Error(ErrorResponse::from_str(
+                    Json(JsonResponse::Error(ErrorResponse::new_from_str(
                         "TODO not found!",
                     ))),
                 );

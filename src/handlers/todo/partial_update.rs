@@ -24,23 +24,23 @@ pub async fn handler(
     if let Err(validation_errors) = request.validate() {
         return (
             StatusCode::BAD_REQUEST,
-            Json(JsonResponse::Error(ErrorResponse::from_str(&format!(
+            Json(JsonResponse::Error(ErrorResponse::new_from_str(&format!(
                 "Validation error: {}",
                 validation_errors
             )))),
         );
     }
 
-    match todo_service.partial_update(user.user_id as i32, id as i32, request.into()).await {
+    match todo_service
+        .partial_update(user.user_id, id as i32, request.into())
+        .await
+    {
         Ok(_) => (StatusCode::OK, Json(JsonResponse::Success(true))),
         Err(error) => {
-            if matches!(
-                error,
-                service::todo::Error::TodoNotFound
-            ) {
+            if matches!(error, service::todo::Error::TodoNotFound) {
                 return (
                     StatusCode::NOT_FOUND,
-                    Json(JsonResponse::Error(ErrorResponse::from_str(
+                    Json(JsonResponse::Error(ErrorResponse::new_from_str(
                         "TODO not found!",
                     ))),
                 );

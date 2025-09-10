@@ -185,7 +185,7 @@ async fn test_multiple_token_generations() -> Result<()> {
     // Generate multiple tokens
     for i in 0..5 {
         let user = User {
-            id: i as i32,
+            id: i,
             username: format!("user_{}", i),
             password: "hashedpassword".to_string(),
             created: NaiveDate::from_ymd_opt(2024, 1, 1)

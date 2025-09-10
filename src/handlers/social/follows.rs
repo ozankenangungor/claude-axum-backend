@@ -34,7 +34,11 @@ pub async fn follow_user(
         return Err(StatusCode::BAD_REQUEST);
     }
 
-    match app_state.social_service.follow_user(claims.sub, following_id).await {
+    match app_state
+        .social_service
+        .follow_user(claims.sub, following_id)
+        .await
+    {
         Ok(follow) => Ok((StatusCode::CREATED, Json(follow))),
         Err(e) => {
             eprintln!("Failed to follow user: {}", e);
@@ -48,7 +52,11 @@ pub async fn unfollow_user(
     Extension(claims): Extension<Claims>,
     Path(following_id): Path<i32>,
 ) -> Result<StatusCode, StatusCode> {
-    match app_state.social_service.unfollow_user(claims.sub, following_id).await {
+    match app_state
+        .social_service
+        .unfollow_user(claims.sub, following_id)
+        .await
+    {
         Ok(true) => Ok(StatusCode::NO_CONTENT),
         Ok(false) => Err(StatusCode::NOT_FOUND),
         Err(e) => {
@@ -63,7 +71,11 @@ pub async fn check_following(
     Extension(claims): Extension<Claims>,
     Path(following_id): Path<i32>,
 ) -> Result<Json<bool>, StatusCode> {
-    match app_state.social_service.is_following(claims.sub, following_id).await {
+    match app_state
+        .social_service
+        .is_following(claims.sub, following_id)
+        .await
+    {
         Ok(is_following) => Ok(Json(is_following)),
         Err(e) => {
             eprintln!("Failed to check following status: {}", e);
@@ -77,7 +89,11 @@ pub async fn get_followers(
     Path(user_id): Path<i32>,
     Query(query): Query<FollowQuery>,
 ) -> Result<Json<Vec<UserProfile>>, StatusCode> {
-    match app_state.social_service.get_followers(user_id, query.limit, query.offset).await {
+    match app_state
+        .social_service
+        .get_followers(user_id, query.limit, query.offset)
+        .await
+    {
         Ok(followers) => Ok(Json(followers)),
         Err(e) => {
             eprintln!("Failed to get followers: {}", e);
@@ -91,7 +107,11 @@ pub async fn get_following(
     Path(user_id): Path<i32>,
     Query(query): Query<FollowQuery>,
 ) -> Result<Json<Vec<UserProfile>>, StatusCode> {
-    match app_state.social_service.get_following(user_id, query.limit, query.offset).await {
+    match app_state
+        .social_service
+        .get_following(user_id, query.limit, query.offset)
+        .await
+    {
         Ok(following) => Ok(Json(following)),
         Err(e) => {
             eprintln!("Failed to get following: {}", e);

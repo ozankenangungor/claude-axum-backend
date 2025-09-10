@@ -2,7 +2,10 @@ use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use validator::Validate;
 
 use crate::{
-    handlers::{auth::models::{LoginRequest, LoginResponse}, models::{ErrorResponse, JsonResponse}},
+    handlers::{
+        auth::models::{LoginRequest, LoginResponse},
+        models::{ErrorResponse, JsonResponse},
+    },
     service::auth::Error,
     AppState,
 };
@@ -14,7 +17,7 @@ pub async fn handler(
     if let Err(validation_errors) = request.validate() {
         return (
             StatusCode::BAD_REQUEST,
-            Json(JsonResponse::Error(ErrorResponse::from_str(&format!(
+            Json(JsonResponse::Error(ErrorResponse::new_from_str(&format!(
                 "Validation error: {}",
                 validation_errors
             )))),
@@ -22,17 +25,30 @@ pub async fn handler(
     }
 
     match auth_service.login(request).await {
-        Ok(token) => (StatusCode::OK, Json(JsonResponse::Success(LoginResponse { token }))),
+        Ok(token) => (
+            StatusCode::OK,
+            Json(JsonResponse::Success(LoginResponse { token })),
+        ),
         Err(error) => {
-            if matches!(error, Error::InvalidPassword) {
-                return (StatusCode::UNAUTHORIZED, Json(JsonResponse::Error(ErrorResponse::from_error(error))));
-            }
+            let message = match error {
+                Error::InvalidPassword => "Invalid password".to_string(),
+                Error::UserNotFound => "User not found".to_string(),
+                Error::UsernameAlreadyExists(_)
+                | Error::ConnectionPool(_)
+                | Error::Sqlx(_)
+                | Error::Hashing(_)
+                | Error::EnvVar(_)
+                | Error::JwtService(_)
+                | Error::WeakPassword(_) => {
+                    tracing::error!("Login error: {:?}", error);
+                    "Internal server error".to_string()
+                }
+            };
 
-            if matches!(error, Error::UserNotFound) {
-                return (StatusCode::UNAUTHORIZED, Json(JsonResponse::Error(ErrorResponse::from_str("Invalid username!"))));
-            }
-
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(JsonResponse::Error(ErrorResponse::from_error(error))))
-        },
+            (
+                StatusCode::BAD_REQUEST,
+                Json(JsonResponse::Error(ErrorResponse::new_from_str(&message))),
+            )
+        }
     }
 }

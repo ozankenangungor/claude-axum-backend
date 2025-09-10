@@ -13,7 +13,7 @@ pub async fn handler(
     State(AppState { todo_service, .. }): State<AppState>,
     Extension(user): Extension<ContextUser>,
 ) -> impl IntoResponse {
-    match todo_service.list(user.user_id as i32).await {
+    match todo_service.list(user.user_id).await {
         Ok(result) => (
             StatusCode::OK,
             Json(JsonResponse::Success(

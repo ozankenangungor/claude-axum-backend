@@ -29,7 +29,11 @@ pub async fn create_post(
     Extension(claims): Extension<Claims>,
     Json(create_post): Json<CreatePost>,
 ) -> Result<(StatusCode, Json<Post>), StatusCode> {
-    match app_state.social_service.create_post(claims.sub, create_post).await {
+    match app_state
+        .social_service
+        .create_post(claims.sub, create_post)
+        .await
+    {
         Ok(post) => Ok((StatusCode::CREATED, Json(post))),
         Err(e) => {
             eprintln!("Failed to create post: {}", e);
@@ -57,7 +61,11 @@ pub async fn get_user_posts(
     Path(user_id): Path<i32>,
     Query(query): Query<PostQuery>,
 ) -> Result<Json<Vec<Post>>, StatusCode> {
-    match app_state.social_service.get_user_posts(user_id, query.limit, query.offset).await {
+    match app_state
+        .social_service
+        .get_user_posts(user_id, query.limit, query.offset)
+        .await
+    {
         Ok(posts) => Ok(Json(posts)),
         Err(e) => {
             eprintln!("Failed to get user posts: {}", e);
@@ -71,7 +79,11 @@ pub async fn get_feed(
     Extension(claims): Extension<Claims>,
     Query(query): Query<PostQuery>,
 ) -> Result<Json<Vec<Post>>, StatusCode> {
-    match app_state.social_service.get_feed_posts(claims.sub, query.limit, query.offset).await {
+    match app_state
+        .social_service
+        .get_feed_posts(claims.sub, query.limit, query.offset)
+        .await
+    {
         Ok(posts) => Ok(Json(posts)),
         Err(e) => {
             eprintln!("Failed to get feed: {}", e);
@@ -86,7 +98,11 @@ pub async fn update_post(
     Path(post_id): Path<i32>,
     Json(update_post): Json<UpdatePost>,
 ) -> Result<Json<Post>, StatusCode> {
-    match app_state.social_service.update_post(post_id, claims.sub, update_post).await {
+    match app_state
+        .social_service
+        .update_post(post_id, claims.sub, update_post)
+        .await
+    {
         Ok(Some(post)) => Ok(Json(post)),
         Ok(None) => Err(StatusCode::NOT_FOUND),
         Err(e) => {
@@ -101,7 +117,11 @@ pub async fn delete_post(
     Extension(claims): Extension<Claims>,
     Path(post_id): Path<i32>,
 ) -> Result<StatusCode, StatusCode> {
-    match app_state.social_service.delete_post(post_id, claims.sub).await {
+    match app_state
+        .social_service
+        .delete_post(post_id, claims.sub)
+        .await
+    {
         Ok(true) => Ok(StatusCode::NO_CONTENT),
         Ok(false) => Err(StatusCode::NOT_FOUND),
         Err(e) => {

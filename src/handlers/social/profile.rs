@@ -58,7 +58,11 @@ pub async fn update_profile(
     Extension(claims): Extension<Claims>,
     Json(update_profile): Json<UpdateUserProfile>,
 ) -> Result<Json<UserProfile>, StatusCode> {
-    match app_state.social_service.update_user_profile(claims.sub, update_profile).await {
+    match app_state
+        .social_service
+        .update_user_profile(claims.sub, update_profile)
+        .await
+    {
         Ok(Some(profile)) => Ok(Json(profile)),
         Ok(None) => Err(StatusCode::NOT_FOUND),
         Err(e) => {
@@ -72,7 +76,11 @@ pub async fn search_users(
     State(app_state): State<AppState>,
     Query(query): Query<SearchQuery>,
 ) -> Result<Json<Vec<UserProfile>>, StatusCode> {
-    match app_state.social_service.search_users(&query.q, query.limit, query.offset).await {
+    match app_state
+        .social_service
+        .search_users(&query.q, query.limit, query.offset)
+        .await
+    {
         Ok(users) => Ok(Json(users)),
         Err(e) => {
             eprintln!("Failed to search users: {}", e);

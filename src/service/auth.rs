@@ -134,7 +134,7 @@ impl Service {
             .with_password(request.password)
             .with_secret_key(&self.hashing_secret)
             .verify()
-            .map_err(|error| Error::Hashing(error))?;
+            .map_err(Error::Hashing)?;
 
         if !pass_valid {
             return Err(Error::InvalidPassword);
@@ -163,7 +163,7 @@ impl Service {
             .with_password(request.password)
             .with_secret_key(&self.hashing_secret)
             .hash()
-            .map_err(|error| Error::Hashing(error))?;
+            .map_err(Error::Hashing)?;
 
         sqlx::query!(
             r#"

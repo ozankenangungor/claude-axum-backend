@@ -29,7 +29,11 @@ pub async fn create_comment(
     Extension(claims): Extension<Claims>,
     Json(create_comment): Json<CreateComment>,
 ) -> Result<(StatusCode, Json<Comment>), StatusCode> {
-    match app_state.social_service.create_comment(claims.sub, create_comment).await {
+    match app_state
+        .social_service
+        .create_comment(claims.sub, create_comment)
+        .await
+    {
         Ok(comment) => Ok((StatusCode::CREATED, Json(comment))),
         Err(e) => {
             eprintln!("Failed to create comment: {}", e);
@@ -43,7 +47,11 @@ pub async fn get_post_comments(
     Path(post_id): Path<i32>,
     Query(query): Query<CommentQuery>,
 ) -> Result<Json<Vec<Comment>>, StatusCode> {
-    match app_state.social_service.get_post_comments(post_id, query.limit, query.offset).await {
+    match app_state
+        .social_service
+        .get_post_comments(post_id, query.limit, query.offset)
+        .await
+    {
         Ok(comments) => Ok(Json(comments)),
         Err(e) => {
             eprintln!("Failed to get comments: {}", e);
@@ -58,7 +66,11 @@ pub async fn update_comment(
     Path(comment_id): Path<i32>,
     Json(update_comment): Json<UpdateComment>,
 ) -> Result<Json<Comment>, StatusCode> {
-    match app_state.social_service.update_comment(comment_id, claims.sub, update_comment).await {
+    match app_state
+        .social_service
+        .update_comment(comment_id, claims.sub, update_comment)
+        .await
+    {
         Ok(Some(comment)) => Ok(Json(comment)),
         Ok(None) => Err(StatusCode::NOT_FOUND),
         Err(e) => {
@@ -73,7 +85,11 @@ pub async fn delete_comment(
     Extension(claims): Extension<Claims>,
     Path(comment_id): Path<i32>,
 ) -> Result<StatusCode, StatusCode> {
-    match app_state.social_service.delete_comment(comment_id, claims.sub).await {
+    match app_state
+        .social_service
+        .delete_comment(comment_id, claims.sub)
+        .await
+    {
         Ok(true) => Ok(StatusCode::NO_CONTENT),
         Ok(false) => Err(StatusCode::NOT_FOUND),
         Err(e) => {

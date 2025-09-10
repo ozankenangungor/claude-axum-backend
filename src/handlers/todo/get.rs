@@ -19,9 +19,8 @@ pub async fn handler(
     Extension(user): Extension<ContextUser>,
     Path(id): Path<u64>,
 ) -> impl IntoResponse {
-    println!("a");
     tracing::info!("TODO'yu getiriliyor: {}", id);
-    match todo_service.get(user.user_id as i32, id as i32).await {
+    match todo_service.get(user.user_id, id as i32).await {
         Ok(result) => (
             StatusCode::OK,
             Json(JsonResponse::Success(Todo::from(result))),
@@ -30,7 +29,7 @@ pub async fn handler(
             if matches!(error, service::todo::Error::TodoNotFound) {
                 return (
                     StatusCode::NOT_FOUND,
-                    Json(JsonResponse::Error(ErrorResponse::from_str(
+                    Json(JsonResponse::Error(ErrorResponse::new_from_str(
                         "TODO not found!",
                     ))),
                 );

@@ -100,7 +100,12 @@ impl SocialService {
         Ok(posts)
     }
 
-    pub async fn update_post(&self, post_id: i32, user_id: i32, update_post: UpdatePost) -> Result<Option<Post>> {
+    pub async fn update_post(
+        &self,
+        post_id: i32,
+        user_id: i32,
+        update_post: UpdatePost,
+    ) -> Result<Option<Post>> {
         let post = sqlx::query_as!(
             Post,
             r#"
@@ -190,7 +195,12 @@ impl SocialService {
         Ok(exists.exists.unwrap_or(false))
     }
 
-    pub async fn get_followers(&self, user_id: i32, limit: i64, offset: i64) -> Result<Vec<UserProfile>> {
+    pub async fn get_followers(
+        &self,
+        user_id: i32,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<UserProfile>> {
         let users = sqlx::query_as!(
             UserProfile,
             r#"
@@ -213,7 +223,12 @@ impl SocialService {
         Ok(users)
     }
 
-    pub async fn get_following(&self, user_id: i32, limit: i64, offset: i64) -> Result<Vec<UserProfile>> {
+    pub async fn get_following(
+        &self,
+        user_id: i32,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<UserProfile>> {
         let users = sqlx::query_as!(
             UserProfile,
             r#"
@@ -279,7 +294,11 @@ impl SocialService {
     }
 
     // Comments
-    pub async fn create_comment(&self, user_id: i32, create_comment: CreateComment) -> Result<Comment> {
+    pub async fn create_comment(
+        &self,
+        user_id: i32,
+        create_comment: CreateComment,
+    ) -> Result<Comment> {
         let comment = sqlx::query_as!(
             Comment,
             r#"
@@ -299,7 +318,12 @@ impl SocialService {
         Ok(comment)
     }
 
-    pub async fn get_post_comments(&self, post_id: i32, limit: i64, offset: i64) -> Result<Vec<Comment>> {
+    pub async fn get_post_comments(
+        &self,
+        post_id: i32,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<Comment>> {
         let comments = sqlx::query_as!(
             Comment,
             r#"
@@ -320,7 +344,12 @@ impl SocialService {
         Ok(comments)
     }
 
-    pub async fn update_comment(&self, comment_id: i32, user_id: i32, update_comment: UpdateComment) -> Result<Option<Comment>> {
+    pub async fn update_comment(
+        &self,
+        comment_id: i32,
+        user_id: i32,
+        update_comment: UpdateComment,
+    ) -> Result<Option<Comment>> {
         let comment = sqlx::query_as!(
             Comment,
             r#"
@@ -375,7 +404,11 @@ impl SocialService {
         Ok(user)
     }
 
-    pub async fn update_user_profile(&self, user_id: i32, update_profile: UpdateUserProfile) -> Result<Option<UserProfile>> {
+    pub async fn update_user_profile(
+        &self,
+        user_id: i32,
+        update_profile: UpdateUserProfile,
+    ) -> Result<Option<UserProfile>> {
         let user = sqlx::query_as!(
             UserProfile,
             r#"
@@ -406,7 +439,12 @@ impl SocialService {
         Ok(user)
     }
 
-    pub async fn search_users(&self, query: &str, limit: i64, offset: i64) -> Result<Vec<UserProfile>> {
+    pub async fn search_users(
+        &self,
+        query: &str,
+        limit: i64,
+        offset: i64,
+    ) -> Result<Vec<UserProfile>> {
         let search_term = format!("%{}%", query);
         let users = sqlx::query_as!(
             UserProfile,

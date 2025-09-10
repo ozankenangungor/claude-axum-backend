@@ -1,7 +1,11 @@
 use chrono::Utc;
 use serial_test::serial;
-use todo_api::db::models::{User, TodoModel, CreateUser, CreateTodo, UpdateTodo, UpdateTodoPartial};
-use todo_api::handlers::todo::models::{CreateTodoRequest, PartialUpdateTodoRequest, UpdateTodoRequest};
+use todo_api::db::models::{
+    CreateTodo, CreateUser, TodoModel, UpdateTodo, UpdateTodoPartial, User,
+};
+use todo_api::handlers::todo::models::{
+    CreateTodoRequest, PartialUpdateTodoRequest, UpdateTodoRequest,
+};
 
 fn create_test_user() -> User {
     User {
@@ -49,7 +53,7 @@ async fn test_create_todo_request_validation() {
         title: "Valid Title".to_string(),
         description: "Valid description".to_string(),
     };
-    
+
     assert_eq!(request.title, "Valid Title");
     assert_eq!(request.description, "Valid description");
 }
@@ -61,7 +65,7 @@ async fn test_todo_update_request() {
         title: "Updated Title".to_string(),
         description: "Updated description".to_string(),
     };
-    
+
     assert_eq!(request.title, "Updated Title");
     assert_eq!(request.description, "Updated description");
 }
@@ -73,7 +77,7 @@ async fn test_todo_partial_update_request() {
         title: Some("Patched Title".to_string()),
         description: None,
     };
-    
+
     assert_eq!(request.title, Some("Patched Title".to_string()));
     assert!(request.description.is_none());
 }
@@ -85,7 +89,7 @@ async fn test_todo_partial_update_request_empty() {
         title: None,
         description: None,
     };
-    
+
     assert!(request.title.is_none());
     assert!(request.description.is_none());
 }
@@ -99,7 +103,7 @@ async fn test_todo_title_edge_cases() {
         description: "Test".to_string(),
     };
     assert_eq!(request.title, "");
-    
+
     // Very long title
     let long_title = "a".repeat(1000);
     let request = CreateTodoRequest {
@@ -107,7 +111,7 @@ async fn test_todo_title_edge_cases() {
         description: "Test".to_string(),
     };
     assert_eq!(request.title, long_title);
-    
+
     // Unicode title
     let unicode_title = "✓ Türkçe görev 🎯";
     let request = CreateTodoRequest {
@@ -127,7 +131,7 @@ async fn test_todo_description_edge_cases() {
         description: long_description.clone(),
     };
     assert_eq!(request.description, long_description);
-    
+
     // Multiline description
     let multiline_description = "Line 1\nLine 2\nLine 3";
     let request = CreateTodoRequest {
@@ -142,7 +146,7 @@ async fn test_todo_description_edge_cases() {
 async fn test_clone_derivations() {
     let request = create_test_todo_request();
     let cloned_request = request.clone();
-    
+
     assert_eq!(request.title, cloned_request.title);
     assert_eq!(request.description, cloned_request.description);
 }
@@ -165,7 +169,7 @@ async fn test_create_user_model() {
         email: Some("newuser@example.com".to_string()),
         display_name: Some("New User".to_string()),
     };
-    
+
     assert_eq!(create_user.username, "newuser");
     assert_eq!(create_user.password, "password123");
 }
@@ -188,7 +192,7 @@ async fn test_create_todo_model() {
         title: "New Todo".to_string(),
         description: "New description".to_string(),
     };
-    
+
     assert_eq!(create_todo.user_id, 1);
     assert_eq!(create_todo.title, "New Todo");
     assert_eq!(create_todo.description, "New description");
@@ -201,7 +205,7 @@ async fn test_update_todo_model() {
         title: "Updated Todo".to_string(),
         description: "Updated description".to_string(),
     };
-    
+
     assert_eq!(update_todo.title, "Updated Todo");
     assert_eq!(update_todo.description, "Updated description");
 }
@@ -213,7 +217,7 @@ async fn test_update_todo_partial_model() {
         title: Some("Partial Title".to_string()),
         description: None,
     };
-    
+
     assert_eq!(partial_update.title, Some("Partial Title".to_string()));
     assert!(partial_update.description.is_none());
 }

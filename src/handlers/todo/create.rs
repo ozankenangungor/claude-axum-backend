@@ -18,14 +18,14 @@ pub async fn handler(
     if let Err(validation_errors) = request.validate() {
         return (
             StatusCode::BAD_REQUEST,
-            Json(JsonResponse::Error(ErrorResponse::from_str(&format!(
+            Json(JsonResponse::Error(ErrorResponse::new_from_str(&format!(
                 "Validation error: {}",
                 validation_errors
             )))),
         );
     }
 
-    match todo_service.create(user.user_id as i32, request).await {
+    match todo_service.create(user.user_id, request).await {
         Ok(result) => (
             StatusCode::OK,
             Json(JsonResponse::Success(Todo::from(result))),
