@@ -46,11 +46,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - uses: actions-rs/toolchain@v1
+    - uses: dtolnay/rust-toolchain@stable
       with:
-        toolchain: stable
-        profile: minimal
-        override: true
         components: rustfmt, clippy
     
     - name: 🔍 Format check
@@ -82,17 +79,13 @@ jobs:
     
     steps:
     - uses: actions/checkout@v4
-    - uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        profile: minimal
-        override: true
+    - uses: dtolnay/rust-toolchain@stable
     
     - name: 🧪 Run tests
       env:
         DATABASE_URL: postgres://postgres:postgres@localhost:5432/todo_test
-        JWT_SECRET: test-jwt-secret-key-for-github-actions-testing-purposes-32-chars
-        HASHING_SECRET_KEY: test-hashing-secret-for-github-actions-16-chars
+        JWT_SECRET: test-jwt-secret-key-for-github-actions-testing-purposes-32-chars-minimum
+        HASHING_SECRET_KEY: test-hashing-secret-for-github-actions-16-chars-minimum
       run: cargo test --verbose
 
   # Deploy to appropriate environment
