@@ -1,0 +1,100 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE users\n            SET display_name = COALESCE($1, display_name),\n                bio = COALESCE($2, bio),\n                avatar_url = COALESCE($3, avatar_url),\n                location = COALESCE($4, location),\n                website = COALESCE($5, website),\n                is_private = COALESCE($6, is_private),\n                updated = NOW()\n            WHERE id = $7\n            RETURNING id, username, display_name, bio, avatar_url, location, \n                      website, is_verified, is_private, follower_count, following_count, \n                      post_count, created\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "username",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "display_name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "bio",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "avatar_url",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "location",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 6,
+        "name": "website",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 7,
+        "name": "is_verified",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 8,
+        "name": "is_private",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 9,
+        "name": "follower_count",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 10,
+        "name": "following_count",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 11,
+        "name": "post_count",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 12,
+        "name": "created",
+        "type_info": "Timestamp"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Text",
+        "Text",
+        "Varchar",
+        "Varchar",
+        "Bool",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "911c531ad81c265eaa23c4e810896fcd843dc535f40b9ea56c6714b6cf4f5883"
+}

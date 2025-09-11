@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE comments\n            SET is_deleted = TRUE, deleted_at = NOW()\n            WHERE id = $1 AND user_id = $2 AND (is_deleted IS NULL OR is_deleted = FALSE)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "2114e06cf634400c0d8afc2d90489299cdb80e2182681d1298862f91a2528e50"
+}

@@ -1,0 +1,90 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT id, user_id, content, image_url, like_count, comment_count, repost_count,\n                   created_at, updated_at, reply_to_post_id, is_deleted, deleted_at\n            FROM posts\n            WHERE user_id = $1 AND (is_deleted IS NULL OR is_deleted = FALSE)\n            ORDER BY created_at DESC\n            LIMIT $2 OFFSET $3\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "user_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "content",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "image_url",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "like_count",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 5,
+        "name": "comment_count",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 6,
+        "name": "repost_count",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 7,
+        "name": "created_at",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 8,
+        "name": "updated_at",
+        "type_info": "Timestamp"
+      },
+      {
+        "ordinal": 9,
+        "name": "reply_to_post_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 10,
+        "name": "is_deleted",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 11,
+        "name": "deleted_at",
+        "type_info": "Timestamp"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "5706d30a4d9efb7618fd2ba8a432c5476c97026a6b381ef8d2c9c4daa57cb2d8"
+}

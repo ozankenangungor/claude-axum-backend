@@ -1,0 +1,94 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT id, username, display_name, bio, avatar_url, location, \n                   website, is_verified, is_private, follower_count, following_count, \n                   post_count, created\n            FROM users\n            WHERE id = $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "username",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "display_name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "bio",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "avatar_url",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "location",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 6,
+        "name": "website",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 7,
+        "name": "is_verified",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 8,
+        "name": "is_private",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 9,
+        "name": "follower_count",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 10,
+        "name": "following_count",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 11,
+        "name": "post_count",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 12,
+        "name": "created",
+        "type_info": "Timestamp"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "e3a876fc13a07e2425a06338969371256883e311e1a537026bf5166281b8f138"
+}

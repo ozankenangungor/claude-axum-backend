@@ -15,6 +15,7 @@ on:
 # Note: Secrets are validated at runtime, not at edit-time
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  SQLX_OFFLINE: true
   
 jobs:
   # Determine which environment to deploy to

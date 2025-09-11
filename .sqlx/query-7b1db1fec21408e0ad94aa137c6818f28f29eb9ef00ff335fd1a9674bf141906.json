@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE posts\n            SET is_deleted = TRUE, deleted_at = NOW()\n            WHERE id = $1 AND user_id = $2 AND (is_deleted IS NULL OR is_deleted = FALSE)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7b1db1fec21408e0ad94aa137c6818f28f29eb9ef00ff335fd1a9674bf141906"
+}

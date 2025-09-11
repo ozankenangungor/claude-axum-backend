@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO follows (follower_id, following_id)\n            VALUES ($1, $2)\n            RETURNING id, follower_id, following_id, created_at\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "follower_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "following_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "created_at",
+        "type_info": "Timestamp"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "38ad91d5d59d1d53dcdceb22a7cab5df77061c5cf3de523ef59e15540b6e0bf6"
+}

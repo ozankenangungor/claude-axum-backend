@@ -64,6 +64,7 @@ jobs:
         DATABASE_URL: postgres://postgres:postgres@localhost:5432/todo_test
         JWT_SECRET: test-jwt-secret-key-for-github-actions-testing-purposes-32-chars-minimum
         HASHING_SECRET_KEY: test-hashing-secret-for-github-actions-16-chars-minimum
+        SQLX_OFFLINE: true
       run: |
         cargo test --verbose
 

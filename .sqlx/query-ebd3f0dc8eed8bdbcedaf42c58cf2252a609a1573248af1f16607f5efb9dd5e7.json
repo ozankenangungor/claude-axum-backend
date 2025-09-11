@@ -1,0 +1,96 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT id, username, display_name, bio, avatar_url, location, \n                   website, is_verified, is_private, follower_count, following_count, \n                   post_count, created\n            FROM users\n            WHERE username ILIKE $1 \n               OR display_name ILIKE $1\n            ORDER BY \n                CASE WHEN username ILIKE $1 THEN 1 ELSE 2 END,\n                follower_count DESC\n            LIMIT $2 OFFSET $3\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "username",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "display_name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "bio",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "avatar_url",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "location",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 6,
+        "name": "website",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 7,
+        "name": "is_verified",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 8,
+        "name": "is_private",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 9,
+        "name": "follower_count",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 10,
+        "name": "following_count",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 11,
+        "name": "post_count",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 12,
+        "name": "created",
+        "type_info": "Timestamp"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "ebd3f0dc8eed8bdbcedaf42c58cf2252a609a1573248af1f16607f5efb9dd5e7"
+}

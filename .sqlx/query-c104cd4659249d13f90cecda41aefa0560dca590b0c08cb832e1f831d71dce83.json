@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE users SET post_count = GREATEST(0, COALESCE(post_count, 0) - 1) WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c104cd4659249d13f90cecda41aefa0560dca590b0c08cb832e1f831d71dce83"
+}
