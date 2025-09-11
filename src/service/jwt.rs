@@ -1,3 +1,4 @@
+use base64::{engine::general_purpose, Engine as _};
 use chrono::{Duration, Utc};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use std::env::VarError;
@@ -19,6 +20,8 @@ pub enum Error {
     JWT(#[from] jsonwebtoken::errors::Error),
     #[error("Failed to parse int from string: {0}")]
     ParseInt(#[from] std::num::ParseIntError),
+    #[error("Base64 Decode Error: {0}")]
+    Base64Decode(#[from] base64::DecodeError),
 }
 
 #[derive(Clone)]
@@ -28,16 +31,21 @@ pub struct Service {
 }
 
 impl Service {
-    pub fn new(jwt_secret: &str) -> Result<Self, Error> {
+    // Bu fonksiyon artık Base64 formatında bir secret bekliyor
+    pub fn new(jwt_secret_base64: &str) -> Result<Self, Error> {
+        // Gelen Base64 string'ini byte dizisine çeviriyoruz.
+        // Çökme (panic) yerine artık Result döndürüyor, çok daha güvenli.
+        let secret_bytes = general_purpose::STANDARD.decode(jwt_secret_base64)?;
+
         Ok(Self {
-            encoding_key: EncodingKey::from_secret(jwt_secret.as_bytes()),
-            decoding_key: DecodingKey::from_secret(jwt_secret.as_bytes()),
+            encoding_key: EncodingKey::from_secret(&secret_bytes),
+            decoding_key: DecodingKey::from_secret(&secret_bytes),
         })
     }
 
     pub fn generate_token(&self, user: &User) -> Result<String, Error> {
         let expiration = Utc::now()
-            .checked_add_signed(Duration::hours(24)) // 24 hours for security
+            .checked_add_signed(Duration::hours(24))
             .expect("valid timestamp")
             .timestamp();
 

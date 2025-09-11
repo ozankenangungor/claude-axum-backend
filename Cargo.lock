@@ -4433,6 +4433,7 @@ dependencies = [
  "assert_matches",
  "axum",
  "axum-macros",
+ "base64 0.22.1",
  "chrono",
  "criterion",
  "dotenvy",
