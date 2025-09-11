@@ -196,11 +196,11 @@ jobs:
         # Environment-specific configurations
         case "$ENVIRONMENT" in
           production)
-            MEMORY="1Gi"
-            CPU="2"
-            MIN_INSTANCES="2"
-            MAX_INSTANCES="20"
-            CONCURRENCY="100"
+            MEMORY="512Mi"
+            CPU="1"
+            MIN_INSTANCES="0"
+            MAX_INSTANCES="10"
+            CONCURRENCY="80"
             LOG_LEVEL="info"
             SECRETS="--set-secrets=DATABASE_URL=database-url:latest,JWT_SECRET=jwt-secret:latest,HASHING_SECRET_KEY=hashing-secret:latest"
             LABELS="env=production,team=backend,cost-center=engineering"
@@ -208,8 +208,8 @@ jobs:
           staging)
             MEMORY="512Mi"
             CPU="1"
-            MIN_INSTANCES="1"
-            MAX_INSTANCES="10"
+            MIN_INSTANCES="0"
+            MAX_INSTANCES="5"
             CONCURRENCY="80"
             LOG_LEVEL="debug"
             SECRETS="--set-secrets=DATABASE_URL=database-url-staging:latest,JWT_SECRET=jwt-secret-staging:latest,HASHING_SECRET_KEY=hashing-secret-staging:latest"
