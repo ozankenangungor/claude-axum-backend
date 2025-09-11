@@ -127,7 +127,7 @@ jobs:
     - name: 🧪 Run Tests
       env:
         DATABASE_URL: postgres://postgres:postgres@localhost:5432/todo_test
-        JWT_SECRET: test-jwt-secret-32-chars-minimum-for-testing
+        JWT_SECRET: dGhpc19pc19hX3ZhbGlkX3Rlc3Rfc2VjcmV0X2tleV9mb3JfZ2l0aHViISE=
         HASHING_SECRET_KEY: test-hashing-secret-16-chars-min
         RUST_BACKTRACE: 1
       run: |
