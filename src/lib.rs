@@ -13,7 +13,7 @@ use tower_http::{
     compression::CompressionLayer, cors::CorsLayer, limit::RequestBodyLimitLayer,
     timeout::TimeoutLayer,
 };
-use tracing::error;
+use tracing::{error, info};
 pub mod config;
 pub mod db;
 pub mod handlers;
