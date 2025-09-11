@@ -1,5 +1,6 @@
 use chrono::Utc;
 use serial_test::serial;
+use std::env;
 use todo_api::db::models::{
     CreateTodo, CreateUser, TodoModel, UpdateTodo, UpdateTodoPartial, User,
 };
@@ -10,7 +11,8 @@ use todo_api::handlers::todo::models::{
 use todo_api::service::jwt::Service as JwtService;
 
 fn create_jwt_service() -> JwtService {
-    JwtService::new("integration_test_secret").expect("Failed to create JWT service")
+    let secret = env::var("JWT_SECRET").expect("TEST_JWT_SECRET çevre değişkeni ayarlanmamış!");
+    JwtService::new(&secret).expect("Çevre değişkenindeki secret ile JWT servisi oluşturulamadı")
 }
 
 fn create_test_user() -> User {
