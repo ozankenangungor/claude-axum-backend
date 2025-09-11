@@ -1,62 +1,85 @@
 # 🔄 Multi-Environment Deployment Workflow
-
+# Professional CI/CD pipeline for Production, Staging, and Development environments
 name: 🚀 Multi-Environment Deploy
 
 on:
   push:
     branches: 
-      - main        # Production
-      - develop     # Staging
-      - 'feature/*' # Feature branches (dev deployment)
+      - main        # → Production
+      - develop     # → Staging
+      - 'feature/*' # → Development
+      - 'hotfix/*'  # → Production (emergency fixes)
   pull_request:
     branches: [main, develop]
-
-# Environment variables
-# Note: Secrets are validated at runtime, not at edit-time
+  delete:
+    # Fixed: Removed the nested 'branches' mapping that was causing the error
+    
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REGION: us-central1
+  DOCKER_REGISTRY: gcr.io
   SQLX_OFFLINE: true
   
 jobs:
-  # Determine which environment to deploy to
+  # ========================================
+  # 1. Environment Configuration
+  # ========================================
   set-environment:
+    name: 🎯 Configure Environment
     runs-on: ubuntu-latest
     outputs:
       environment: ${{ steps.set-env.outputs.environment }}
       service-name: ${{ steps.set-env.outputs.service-name }}
-      region: ${{ steps.set-env.outputs.region }}
+      should-deploy: ${{ steps.set-env.outputs.should-deploy }}
+      is-ephemeral: ${{ steps.set-env.outputs.is-ephemeral }}
     steps:
     - id: set-env
       run: |
-        if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+        # Default values
+        SHOULD_DEPLOY="true"
+        IS_EPHEMERAL="false"
+        
+        if [[ "${{ github.ref }}" == "refs/heads/main" ]] || [[ "${{ github.ref }}" == "refs/heads/hotfix/"* ]]; then
           echo "environment=production" >> $GITHUB_OUTPUT
           echo "service-name=todo-api" >> $GITHUB_OUTPUT
-          echo "region=us-central1" >> $GITHUB_OUTPUT
         elif [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
           echo "environment=staging" >> $GITHUB_OUTPUT
           echo "service-name=todo-api-staging" >> $GITHUB_OUTPUT
-          echo "region=us-central1" >> $GITHUB_OUTPUT
+        elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
+          # PR environments
+          echo "environment=preview" >> $GITHUB_OUTPUT
+          echo "service-name=todo-api-pr-${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+          IS_EPHEMERAL="true"
         else
+          # Feature branch environments
+          BRANCH_NAME=$(echo "${{ github.head_ref || github.ref_name }}" | sed 's/[^a-zA-Z0-9]/-/g' | tr '[:upper:]' '[:lower:]' | cut -c1-40)
           echo "environment=development" >> $GITHUB_OUTPUT
-          echo "service-name=todo-api-dev-${{ github.run_number }}" >> $GITHUB_OUTPUT
-          echo "region=us-central1" >> $GITHUB_OUTPUT
+          echo "service-name=todo-api-dev-${BRANCH_NAME}" >> $GITHUB_OUTPUT
+          IS_EPHEMERAL="true"
         fi
+        
+        # Don't deploy on PR unless it's a deployment PR
+        if [[ "${{ github.event_name }}" == "pull_request" ]] && [[ "${{ contains(github.event.pull_request.labels.*.name, 'deploy-preview') }}" != "true" ]]; then
+          SHOULD_DEPLOY="false"
+        fi
+        
+        echo "should-deploy=$SHOULD_DEPLOY" >> $GITHUB_OUTPUT
+        echo "is-ephemeral=$IS_EPHEMERAL" >> $GITHUB_OUTPUT
+        
+        # Log configuration
+        echo "📋 Configuration Summary:"
+        echo "  Environment: $(grep environment $GITHUB_OUTPUT | cut -d= -f2)"
+        echo "  Service: $(grep service-name $GITHUB_OUTPUT | cut -d= -f2)"
+        echo "  Should Deploy: $SHOULD_DEPLOY"
+        echo "  Is Ephemeral: $IS_EPHEMERAL"
 
-  # Quality checks for all environments
-  quality-checks:
+  # ========================================
+  # 2. Tests & Quality Checks
+  # ========================================
+  test-and-quality:
+    name: 🧪 Tests & Quality
     runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-    - uses: dtolnay/rust-toolchain@stable
-      with:
-        components: rustfmt
-    
-    - name: 🔍 Format check
-      run: cargo fmt -- --check
-
-  # Test stage
-  test:
-    runs-on: ubuntu-latest
+    if: github.event_name != 'delete'
     services:
       postgres:
         image: postgres:15
@@ -71,140 +94,316 @@ jobs:
           --health-retries 5
         ports:
           - 5432:5432
-    
     steps:
     - uses: actions/checkout@v4
-    - uses: dtolnay/rust-toolchain@stable
     
-    - name: 🧪 Run tests
+    - name: 🦀 Setup Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: rustfmt, clippy
+        
+    - name: 📦 Cache Dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-
+    
+    - name: 🔍 Format Check
+      run: cargo fmt -- --check
+      
+    - name: 📋 Clippy Linting
+      run: cargo clippy -- -D warnings
+      
+    - name: 🔒 Security Audit
+      run: |
+        cargo install cargo-audit --locked || true
+        cargo audit || true  # Non-blocking for now
+      
+    - name: 🧪 Run Tests
       env:
         DATABASE_URL: postgres://postgres:postgres@localhost:5432/todo_test
-        JWT_SECRET: test-jwt-secret-key-for-github-actions-testing-purposes-32-chars-minimum
-        HASHING_SECRET_KEY: test-hashing-secret-for-github-actions-16-chars-minimum
-      run: cargo test --verbose
+        JWT_SECRET: test-jwt-secret-32-chars-minimum-for-testing
+        HASHING_SECRET_KEY: test-hashing-secret-16-chars-min
+        RUST_BACKTRACE: 1
+      run: |
+        cargo test --verbose --all-features
+        cargo test --doc
 
-  # Deploy to appropriate environment
+  # ========================================
+  # 3. Build & Deploy
+  # ========================================
   deploy:
+    name: 🚀 Build & Deploy
     runs-on: ubuntu-latest
-    needs: [set-environment, quality-checks, test]
-    if: github.event_name == 'push'
+    needs: [set-environment, test-and-quality]
+    if: |
+      github.event_name == 'push' && 
+      needs.set-environment.outputs.should-deploy == 'true'
     environment: ${{ needs.set-environment.outputs.environment }}
-    
+    outputs:
+      service_url: ${{ steps.get_url.outputs.url }}
+      image_digest: ${{ steps.build.outputs.digest }}
     steps:
     - uses: actions/checkout@v4
     
-    - name: 🔐 Authenticate to Google Cloud
-      uses: google-github-actions/auth@v1
+    - name: 🔐 Google Cloud Auth
+      uses: google-github-actions/auth@v2
       with:
         credentials_json: ${{ secrets.GCP_SA_KEY }}
         
-    - name: ⚙️ Set up Cloud SDK
-      uses: google-github-actions/setup-gcloud@v1
+    - name: ⚙️ Setup Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
       
     - name: 🔧 Configure Docker
-      run: gcloud auth configure-docker
+      run: gcloud auth configure-docker ${{ env.DOCKER_REGISTRY }}
       
-    - name: 🏗️ Build Docker image
+    - name: 🏗️ Build Docker Image
+      id: build
       run: |
-        docker build -f Dockerfile.production \
-          -t gcr.io/${{ env.PROJECT_ID }}/${{ needs.set-environment.outputs.service-name }}:${{ github.sha }} \
-          -t gcr.io/${{ env.PROJECT_ID }}/${{ needs.set-environment.outputs.service-name }}:latest .
+        IMAGE_NAME="${{ env.DOCKER_REGISTRY }}/${{ env.PROJECT_ID }}/${{ needs.set-environment.outputs.service-name }}"
         
-    - name: 📤 Push Docker image
+        # Multi-stage build with cache
+        docker build -f Dockerfile.production \
+          -t $IMAGE_NAME:${{ github.sha }} \
+          -t $IMAGE_NAME:latest \
+          --cache-from $IMAGE_NAME:latest \
+          --cache-from $IMAGE_NAME:builder \
+          --build-arg BUILDKIT_INLINE_CACHE=1 \
+          --target production \
+          .
+        
+        # Get digest for security
+        DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' $IMAGE_NAME:${{ github.sha }} 2>/dev/null | cut -d'@' -f2 || echo "none")
+        echo "digest=$DIGEST" >> $GITHUB_OUTPUT
+        
+    - name: 📤 Push Docker Image
       run: |
-        docker push gcr.io/${{ env.PROJECT_ID }}/${{ needs.set-environment.outputs.service-name }}:${{ github.sha }}
-        docker push gcr.io/${{ env.PROJECT_ID }}/${{ needs.set-environment.outputs.service-name }}:latest
+        IMAGE_NAME="${{ env.DOCKER_REGISTRY }}/${{ env.PROJECT_ID }}/${{ needs.set-environment.outputs.service-name }}"
+        docker push $IMAGE_NAME --all-tags
         
     - name: 🚀 Deploy to Cloud Run
+      id: deploy
       run: |
-        # Set environment-specific configuration
-        if [[ "${{ needs.set-environment.outputs.environment }}" == "production" ]]; then
-          MEMORY="512Mi"
-          CPU="1"
-          MIN_INSTANCES="1"
-          MAX_INSTANCES="10"
-          LOG_LEVEL="info"
-        elif [[ "${{ needs.set-environment.outputs.environment }}" == "staging" ]]; then
-          MEMORY="256Mi"
-          CPU="0.5"
-          MIN_INSTANCES="0"
-          MAX_INSTANCES="5"
-          LOG_LEVEL="debug"
-        else
-          MEMORY="256Mi"
-          CPU="0.5"
-          MIN_INSTANCES="0"
-          MAX_INSTANCES="2"
-          LOG_LEVEL="debug"
+        SERVICE_NAME="${{ needs.set-environment.outputs.service-name }}"
+        IMAGE_NAME="${{ env.DOCKER_REGISTRY }}/${{ env.PROJECT_ID }}/$SERVICE_NAME:${{ github.sha }}"
+        ENVIRONMENT="${{ needs.set-environment.outputs.environment }}"
+        
+        # Environment-specific configurations
+        case "$ENVIRONMENT" in
+          production)
+            MEMORY="1Gi"
+            CPU="2"
+            MIN_INSTANCES="2"
+            MAX_INSTANCES="20"
+            CONCURRENCY="100"
+            LOG_LEVEL="info"
+            SECRETS="--set-secrets=DATABASE_URL=database-url:latest,JWT_SECRET=jwt-secret:latest,HASHING_SECRET_KEY=hashing-secret:latest"
+            LABELS="env=production,team=backend,cost-center=engineering"
+            ;;
+          staging)
+            MEMORY="512Mi"
+            CPU="1"
+            MIN_INSTANCES="1"
+            MAX_INSTANCES="10"
+            CONCURRENCY="80"
+            LOG_LEVEL="debug"
+            SECRETS="--set-secrets=DATABASE_URL=database-url-staging:latest,JWT_SECRET=jwt-secret-staging:latest,HASHING_SECRET_KEY=hashing-secret-staging:latest"
+            LABELS="env=staging,team=backend"
+            ;;
+          preview)
+            MEMORY="256Mi"
+            CPU="0.5"
+            MIN_INSTANCES="0"
+            MAX_INSTANCES="3"
+            CONCURRENCY="50"
+            LOG_LEVEL="debug"
+            SECRETS=""  # Use env vars for PR previews
+            LABELS="env=preview,pr=${{ github.event.pull_request.number }},ephemeral=true"
+            ;;
+          *)
+            MEMORY="256Mi"
+            CPU="0.5"
+            MIN_INSTANCES="0"
+            MAX_INSTANCES="2"
+            CONCURRENCY="50"
+            LOG_LEVEL="trace"
+            SECRETS=""  # Use env vars for dev
+            LABELS="env=development,branch=${{ github.ref_name }},ephemeral=true"
+            ;;
+        esac
+        
+        # Add expiry label for ephemeral environments
+        if [[ "${{ needs.set-environment.outputs.is-ephemeral }}" == "true" ]]; then
+          EXPIRY_DATE=$(date -u -d "+7 days" +%Y-%m-%d)
+          LABELS="$LABELS,expires=$EXPIRY_DATE"
         fi
         
-        gcloud run deploy ${{ needs.set-environment.outputs.service-name }} \
-          --image gcr.io/${{ env.PROJECT_ID }}/${{ needs.set-environment.outputs.service-name }}:${{ github.sha }} \
+        gcloud run deploy $SERVICE_NAME \
+          --project=${{ env.PROJECT_ID }} \
+          --image $IMAGE_NAME \
+          --region ${{ env.REGION }} \
           --platform managed \
-          --region ${{ needs.set-environment.outputs.region }} \
           --allow-unauthenticated \
           --port 8080 \
           --memory $MEMORY \
           --cpu $CPU \
-          --concurrency 80 \
-          --timeout 300 \
           --min-instances $MIN_INSTANCES \
           --max-instances $MAX_INSTANCES \
-          --set-env-vars="GCP_PROJECT_ID=${{ env.PROJECT_ID }},RUST_LOG=$LOG_LEVEL,ENVIRONMENT=${{ needs.set-environment.outputs.environment }}" \
+          --concurrency $CONCURRENCY \
+          --timeout 300 \
+          --set-env-vars="GCP_PROJECT_ID=${{ env.PROJECT_ID }},RUST_LOG=$LOG_LEVEL,ENVIRONMENT=$ENVIRONMENT,DEPLOYED_BY=${{ github.actor }},COMMIT_SHA=${{ github.sha }}" \
+          $SECRETS \
+          --labels="$LABELS" \
           --quiet
           
-    - name: 🌐 Get service URL
-      id: deploy
+    - name: 🌐 Get Service URL
+      id: get_url
       run: |
         SERVICE_URL=$(gcloud run services describe ${{ needs.set-environment.outputs.service-name }} \
-          --region ${{ needs.set-environment.outputs.region }} \
+          --project=${{ env.PROJECT_ID }} \
+          --region ${{ env.REGION }} \
           --format 'value(status.url)')
         echo "url=$SERVICE_URL" >> $GITHUB_OUTPUT
-        echo "🎉 Deployment successful to ${{ needs.set-environment.outputs.environment }}!"
-        echo "🌐 Service URL: $SERVICE_URL"
-        echo "🏥 Health check: $SERVICE_URL/health"
+        
+        # Create deployment summary
+        cat >> $GITHUB_STEP_SUMMARY << EOF
+        ## 🚀 Deployment Summary
+        
+        | Property | Value |
+        |----------|-------|
+        | **Environment** | ${{ needs.set-environment.outputs.environment }} |
+        | **Service** | ${{ needs.set-environment.outputs.service-name }} |
+        | **URL** | [$SERVICE_URL]($SERVICE_URL) |
+        | **Image** | \`${{ github.sha }}\` |
+        | **Deployed By** | @${{ github.actor }} |
+        | **Timestamp** | $(date -u +"%Y-%m-%d %H:%M:%S UTC") |
+        
+        ### 🔗 Quick Links
+        - [Health Check]($SERVICE_URL/health)
+        - [API Docs]($SERVICE_URL/docs)
+        - [Metrics]($SERVICE_URL/metrics)
+        EOF
 
-  # Post-deployment verification
+  # ========================================
+  # 4. Post-Deployment Verification
+  # ========================================
   verify:
+    name: ✅ Verify Deployment
     runs-on: ubuntu-latest
     needs: [deploy, set-environment]
     if: github.event_name == 'push'
-    
     steps:
-    - name: 🏥 Health check
+    - name: 🏥 Health Check
       run: |
-        SERVICE_URL=$(gcloud run services describe ${{ needs.set-environment.outputs.service-name }} \
-          --region ${{ needs.set-environment.outputs.region }} \
-          --format 'value(status.url)')
+        SERVICE_URL="${{ needs.deploy.outputs.service_url }}"
+        echo "🔍 Checking service health at $SERVICE_URL"
         
-        # Wait for service to be ready
-        sleep 30
+        # Wait for service to stabilize
+        sleep 20
         
-        # Health check
-        response=$(curl -s -o /dev/null -w "%{http_code}" $SERVICE_URL/health)
-        if [[ $response == "200" ]]; then
-          echo "✅ Health check passed!"
-          echo "🎉 ${{ needs.set-environment.outputs.environment }} deployment verified!"
-        else
-          echo "❌ Health check failed with status: $response"
-          exit 1
-        fi
+        # Advanced health check with retries
+        MAX_RETRIES=10
+        RETRY_DELAY=10
+        
+        for i in $(seq 1 $MAX_RETRIES); do
+          echo "Attempt $i/$MAX_RETRIES..."
+          
+          # Check health endpoint
+          if curl -sf --max-time 10 "$SERVICE_URL/health" > /dev/null; then
+            echo "✅ Health check passed!"
+            
+            # Additional smoke tests for production
+            if [[ "${{ needs.set-environment.outputs.environment }}" == "production" ]]; then
+              echo "🔍 Running production smoke tests..."
+              
+              # Check API status
+              curl -sf "$SERVICE_URL/api/v1/status" || echo "⚠️ Status endpoint check failed"
+              
+              # Check metrics endpoint
+              curl -sf "$SERVICE_URL/metrics" || echo "⚠️ Metrics endpoint check failed"
+            fi
+            
+            exit 0
+          fi
+          
+          if [ $i -lt $MAX_RETRIES ]; then
+            echo "⏳ Waiting ${RETRY_DELAY}s before retry..."
+            sleep $RETRY_DELAY
+          fi
+        done
+        
+        echo "❌ Health check failed after $MAX_RETRIES attempts"
+        exit 1
 
-  # Clean up development deployments after 24 hours
-  cleanup-dev:
+  # ========================================
+  # 5. Cleanup Ephemeral Environments
+  # ========================================
+  cleanup:
+    name: 🧹 Cleanup Environment
     runs-on: ubuntu-latest
-    if: github.ref != 'refs/heads/main' && github.ref != 'refs/heads/develop' && github.event_name == 'push'
-    
+    if: |
+      github.event_name == 'delete' || 
+      (github.event_name == 'pull_request' && github.event.action == 'closed')
     steps:
-    - name: 🔐 Authenticate to Google Cloud
-      uses: google-github-actions/auth@v1
+    - name: 🔐 Google Cloud Auth
+      uses: google-github-actions/auth@v2
       with:
         credentials_json: ${{ secrets.GCP_SA_KEY }}
         
-    - name: ⚙️ Set up Cloud SDK
-      uses: google-github-actions/setup-gcloud@v1
+    - name: ⚙️ Setup Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
       
-    - name: 🧹 Schedule cleanup
+    - name: 🧹 Delete Cloud Run Service
       run: |
-        echo "Development deployment will be cleaned up automatically after 24 hours"
-        # Bu kısım için Google Cloud Scheduler kullanabilirsiniz
+        # Determine service name based on event type
+        if [[ "${{ github.event_name }}" == "delete" ]]; then
+          BRANCH_NAME=$(echo "${{ github.event.ref }}" | sed 's/[^a-zA-Z0-9]/-/g' | tr '[:upper:]' '[:lower:]' | cut -c1-40)
+          SERVICE_NAME="todo-api-dev-${BRANCH_NAME}"
+        else
+          # PR closed
+          SERVICE_NAME="todo-api-pr-${{ github.event.pull_request.number }}"
+        fi
+        
+        echo "🧹 Attempting to delete service: $SERVICE_NAME"
+        
+        # Delete the service (ignore errors if it doesn't exist)
+        gcloud run services delete $SERVICE_NAME \
+          --project=${{ env.PROJECT_ID }} \
+          --region=${{ env.REGION }} \
+          --quiet || echo "ℹ️ Service not found or already deleted"
+        
+        # Clean up associated container images
+        echo "🧹 Cleaning up container images..."
+        IMAGE_NAME="${{ env.DOCKER_REGISTRY }}/${{ env.PROJECT_ID }}/$SERVICE_NAME"
+        gcloud container images delete $IMAGE_NAME --quiet --force-delete-tags || true
+        
+        echo "✅ Cleanup completed"
+
+  # ========================================
+  # 6. Notification (Optional)
+  # ========================================
+  notify:
+    name: 📢 Send Notifications
+    runs-on: ubuntu-latest
+    needs: [deploy, verify, set-environment]
+    if: always() && github.event_name == 'push' && needs.set-environment.outputs.environment == 'production'
+    steps:
+    - name: 📊 Deployment Status
+      run: |
+        if [[ "${{ needs.verify.result }}" == "success" ]]; then
+          STATUS="✅ SUCCESS"
+          COLOR="28a745"
+        else
+          STATUS="❌ FAILED"
+          COLOR="dc3545"
+        fi
+        
+        # Add notification logic here (Slack, Discord, email, etc.)
+        echo "Deployment Status: $STATUS"
+        echo "Environment: ${{ needs.set-environment.outputs.environment }}"
+        echo "URL: ${{ needs.deploy.outputs.service_url }}"

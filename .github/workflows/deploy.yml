@@ -1,26 +1,29 @@
+# 🚀 Production Deployment Workflow
+# This workflow tests, builds, and deploys the application to Google Cloud Run.
 name: 🚀 Production Deployment
 
-# Trigger conditions - ne zaman çalışacak
+# --- Trigger Conditions ---
 on:
   push:
-    branches: [main, master]  # main/master branch'e push olduğunda
+    branches: [main, master]
   pull_request:
-    branches: [main, master]  # PR oluşturulduğunda (test için)
-  workflow_dispatch:          # Manual trigger için
+    branches: [main, master]
+  workflow_dispatch: # Allows manual triggering from the Actions tab
 
-# Environment variables
-# Note: Secrets are validated at runtime, not at edit-time
+# --- Environment Variables ---
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   SERVICE_NAME: todo-api
   REGION: us-central1
   
+# --- Jobs ---
 jobs:
-  # 🧪 Test Stage - Önce her şeyi test et
+  # 🧪 Test Stage: Runs formatting checks and tests against a real DB.
   test:
-    name: 🧪 Run Tests
+    name: 🧪 Run Tests & Quality Checks
     runs-on: ubuntu-latest
     
+    # Starts a PostgreSQL container for integration tests
     services:
       postgres:
         image: postgres:15
@@ -35,46 +38,48 @@ jobs:
           --health-retries 5
         ports:
           - 5432:5432
-    
+          
     steps:
     - name: 📥 Checkout code
       uses: actions/checkout@v4
       
-    - name: 🦀 Setup Rust
+    - name: 🦀 Setup Rust Toolchain
       uses: dtolnay/rust-toolchain@stable
       with:
         components: rustfmt, clippy
         
-    - name: 📦 Cache Cargo dependencies
+    - name: 📦 Cache Cargo Dependencies
       uses: actions/cache@v4
       with:
         path: |
           ~/.cargo/registry
           ~/.cargo/git
           target
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-cargo-
+        key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
     
-    - name: 🔍 Check formatting
+    - name: 🔍 Check Formatting
       run: cargo fmt -- --check
       
-    - name: 🧪 Run tests
+    - name: 🧪 Run Tests
       env:
         DATABASE_URL: postgres://postgres:postgres@localhost:5432/todo_test
+        # Use non-sensitive secrets for testing purposes
         JWT_SECRET: test-jwt-secret-key-for-github-actions-testing-purposes-32-chars-minimum
         HASHING_SECRET_KEY: test-hashing-secret-for-github-actions-16-chars-minimum
         SQLX_OFFLINE: true
-      run: |
-        cargo test --verbose
+      run: cargo test --verbose
 
-  # 🚀 Deploy Stage - Test geçerse deploy et
+  # 🚀 Deploy Stage: Deploys the application if tests pass on the main branch.
   deploy:
     name: 🚀 Deploy to Cloud Run
     runs-on: ubuntu-latest
-    needs: test  # Test job'ının başarıyla tamamlanmasını bekle
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'  # Sadece main branch'e push olduğunda
+    needs: test # Ensures this job only runs if the 'test' job succeeds
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push' # Condition to deploy only on push to main
     
+    # Expose the service URL to other jobs
+    outputs:
+      service_url: ${{ steps.get_url.outputs.url }}
+      
     steps:
     - name: 📥 Checkout code
       uses: actions/checkout@v4
@@ -82,28 +87,28 @@ jobs:
     - name: 🔐 Authenticate to Google Cloud
       uses: google-github-actions/auth@v1
       with:
-        # GCP_SA_KEY secret should contain the service account JSON key
         credentials_json: ${{ secrets.GCP_SA_KEY }}
         
-    - name: ⚙️ Set up Cloud SDK
+    - name: ⚙️ Set up Google Cloud SDK
       uses: google-github-actions/setup-gcloud@v1
       
-    - name: 🔧 Configure Docker for GCR
-      run: gcloud auth configure-docker
+    - name: 🔧 Configure Docker for Artifact Registry
+      run: gcloud auth configure-docker gcr.io
       
-    - name: 🏗️ Build Docker image
+    - name: 🏗️ Build Docker Image
       run: |
         docker build -f Dockerfile.production -t gcr.io/$PROJECT_ID/$SERVICE_NAME:$GITHUB_SHA .
         docker tag gcr.io/$PROJECT_ID/$SERVICE_NAME:$GITHUB_SHA gcr.io/$PROJECT_ID/$SERVICE_NAME:latest
         
-    - name: 📤 Push to Container Registry
+    - name: 📤 Push Image to Google Container Registry
       run: |
         docker push gcr.io/$PROJECT_ID/$SERVICE_NAME:$GITHUB_SHA
         docker push gcr.io/$PROJECT_ID/$SERVICE_NAME:latest
         
-    - name: 🚀 Deploy to Cloud Run
+    - name: 🚀 Deploy to Google Cloud Run
       run: |
         gcloud run deploy $SERVICE_NAME \
+          --project=$PROJECT_ID \
           --image gcr.io/$PROJECT_ID/$SERVICE_NAME:$GITHUB_SHA \
           --platform managed \
           --region $REGION \
@@ -118,26 +123,28 @@ jobs:
           --set-env-vars="GCP_PROJECT_ID=$PROJECT_ID,RUST_LOG=info" \
           --quiet
           
-    - name: 🌐 Get service URL
+    - name: 🌐 Get Service URL and Set as Output
+      id: get_url
       run: |
-        SERVICE_URL=$(gcloud run services describe $SERVICE_NAME --region $REGION --format 'value(status.url)')
+        SERVICE_URL=$(gcloud run services describe $SERVICE_NAME --project=$PROJECT_ID --region $REGION --format 'value(status.url)')
+        echo "url=$SERVICE_URL" >> $GITHUB_OUTPUT
         echo "🎉 Deployment successful!"
         echo "🌐 Service URL: $SERVICE_URL"
-        echo "🏥 Health check: $SERVICE_URL/health"
 
-  # 📊 Post-deployment checks
+  # 📊 Health Check Stage: Verifies the deployment is healthy.
   health-check:
     name: 🏥 Health Check
     runs-on: ubuntu-latest
-    needs: deploy
+    needs: deploy # Runs after the 'deploy' job
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     
     steps:
-    - name: 🏥 Wait for service to be ready
+    - name: 🏥 Wait for Service to Stabilize
       run: sleep 30
       
-    - name: 🏥 Health check
+    - name: 🏥 Perform Health Check
       run: |
-        SERVICE_URL=$(gcloud run services describe ${{ env.SERVICE_NAME }} --region ${{ env.REGION }} --format 'value(status.url)')
-        curl -f $SERVICE_URL/health || exit 1
+        SERVICE_URL="${{ needs.deploy.outputs.service_url }}"
+        echo "Pinging health endpoint: $SERVICE_URL/health"
+        curl -f --retry 5 --retry-delay 10 "$SERVICE_URL/health" || exit 1
         echo "✅ Health check passed!"
