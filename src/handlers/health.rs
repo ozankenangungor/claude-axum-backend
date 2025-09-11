@@ -5,11 +5,10 @@ pub async fn handler() -> impl IntoResponse {
     (
         StatusCode::OK,
         Json(json!({
-            "status": "healthy",
-            "timestamp": chrono::Utc::now().to_rfc3339(),
-            "service": "todo_api",
             "ozan": "kenan",
-            "okey":"tamam"
+            "asli":"sahin",
+            "123":"456",
+            "anne seni cok seviyorum":"anne seni cok seviyorum"
         })),
     )
 }
