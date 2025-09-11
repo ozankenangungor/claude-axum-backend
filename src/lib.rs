@@ -32,6 +32,7 @@ async fn auth_middleware(
     mut req: Request,
     next: Next,
 ) -> Result<Response, StatusCode> {
+    info!(">>> Auth middleware çalıştı! Token kontrol ediliyor...");
     if let Some(auth_header) = req.headers().get(http::header::AUTHORIZATION) {
         let auth_header_content = auth_header.to_str().map_err(|_| StatusCode::UNAUTHORIZED)?;
         if !auth_header_content.starts_with("Bearer ") {
