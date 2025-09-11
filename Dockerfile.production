@@ -1,37 +1,43 @@
 # Production-ready Multi-stage Dockerfile for Google Cloud Run
-# Stage 1: Build environment with Rust compiler
-FROM rust:1.89-bullseye AS builder
+# ----------------------------------------------------------------
 
-# Install dependencies for building
+# Stage 1: Build environment with cargo-chef
+# Using "bookworm" for a more secure and up-to-date base OS
+FROM rust:1.89-bookworm AS builder
+
+# Install build dependencies and cargo-chef in one layer
 RUN apt-get update && apt-get install -y \
     pkg-config \
     libssl-dev \
-    libclang-dev \
     clang \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && cargo install cargo-chef
 
-# Set working directory
 WORKDIR /usr/src/app
 
-# Copy dependency files first for better caching
+# --- Dependency Caching with cargo-chef ---
+# First, copy only the files required to calculate dependencies
 COPY Cargo.toml Cargo.lock ./
 COPY .sqlx ./.sqlx
-
-# Create dummy source to build dependencies
-RUN mkdir src && echo "fn main() {}" > src/main.rs
-RUN cargo build --release && rm src/main.rs
-
-# Copy actual source code
-COPY src ./src
-COPY build.rs ./
 COPY migrations ./migrations
+# Copying src is needed to understand all dependencies, including binary-specific ones
+COPY src ./src 
 
-# Build the application
-RUN rm -f target/release/deps/todo_api*
+# 1. Prepare the build recipe
+RUN cargo chef prepare --recipe-path recipe.json
+
+# 2. Cook (build) the dependencies. This layer will be cached heavily.
+RUN cargo chef cook --release --recipe-path recipe.json
+
+# --- Actual Build ---
+# 3. Copy the rest of the source code and build the final application
+COPY . .
 RUN cargo build --release
 
+# ----------------------------------------------------------------
 # Stage 2: Minimal runtime image
-FROM debian:bullseye-slim
+# Using "bookworm-slim" for consistency and security
+FROM debian:bookworm-slim
 
 # Create non-root user for security
 RUN groupadd -r appuser && useradd -r -g appuser appuser
@@ -43,11 +49,15 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
-# Copy the built binary
+# Copy the built binaries from the builder stage
+# Your Cargo.toml defines two binaries: todo_api and migrate.
 COPY --from=builder /usr/src/app/target/release/todo_api /usr/local/bin/todo_api
+COPY --from=builder /usr/src/app/target/release/migrate /usr/local/bin/migrate
 
 # Change ownership to non-root user
-RUN chown appuser:appuser /usr/local/bin/todo_api
+# If you don't need the migrate binary in production, you can remove this line.
+RUN chown appuser:appuser /usr/local/bin/todo_api && \
+    chown appuser:appuser /usr/local/bin/migrate
 
 # Switch to non-root user
 USER appuser
