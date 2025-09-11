@@ -37,7 +37,8 @@ RUN cargo build --release
 # ----------------------------------------------------------------
 # Stage 2: Minimal runtime image
 # Using "bookworm-slim" for consistency and security
-FROM debian:bookworm-slim
+# --- Final Runtime Stage ---
+FROM debian:bookworm-slim AS production
 
 # Create non-root user for security
 RUN groupadd -r appuser && useradd -r -g appuser appuser
