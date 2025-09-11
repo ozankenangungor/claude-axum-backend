@@ -125,7 +125,10 @@ jobs:
       run: |
         cargo install cargo-audit --locked || true
         cargo audit || true  # Non-blocking for now
-      
+
+    - name: 🧹 Clean Cargo Cache Before Tests
+      run: cargo clean
+
     - name: 🧪 Run Tests
       env:
         DATABASE_URL: postgres://postgres:postgres@localhost:5432/todo_test
