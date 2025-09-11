@@ -8,7 +8,8 @@ pub async fn handler() -> impl IntoResponse {
             "ozan": "kenan",
             "asli":"sahin",
             "123":"456",
-            "anne seni cok seviyorum":"anne seni cok seviyorum"
+            "anne seni cok seviyorum":"anne seni cok seviyorum",
+            "KAŞIK":"ÇATAL"
         })),
     )
 }

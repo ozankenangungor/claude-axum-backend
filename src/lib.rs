@@ -13,7 +13,7 @@ use tower_http::{
     compression::CompressionLayer, cors::CorsLayer, limit::RequestBodyLimitLayer,
     timeout::TimeoutLayer,
 };
-
+use tracing::error;
 pub mod config;
 pub mod db;
 pub mod handlers;
@@ -38,9 +38,21 @@ async fn auth_middleware(
             return Err(StatusCode::UNAUTHORIZED);
         }
         let auth_token = auth_header_content.replace("Bearer ", "");
-        let context_user = jwt_service
-            .verify_token(auth_token)
-            .map_err(|_| StatusCode::UNAUTHORIZED)?;
+
+        // --- DEĞİŞİKLİK BURADA BAŞLIYOR ---
+
+        // 1. Token doğrulama işlemini yap ve sonucunu bir değişkende tut.
+        let verification_result = jwt_service.verify_token(auth_token);
+
+        // 2. Eğer sonuç bir hata ise (Err), hatanın içeriğini log'lara yazdır.
+        if let Err(e) = &verification_result {
+            error!("!!! TOKEN DOĞRULAMA HATASI: {:?}", e);
+        }
+
+        // 3. Orijinal kod gibi devam et, hata varsa Unauthorized döndür.
+        let context_user = verification_result.map_err(|_| StatusCode::UNAUTHORIZED)?;
+
+        // --- DEĞİŞİKLİK BURADA BİTİYOR ---
 
         req.extensions_mut().insert(context_user);
 
