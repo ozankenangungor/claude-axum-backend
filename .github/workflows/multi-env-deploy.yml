@@ -124,7 +124,13 @@ jobs:
     - name: 🔒 Security Audit
       run: |
         cargo install cargo-audit --locked || true
-        cargo audit || true  # Non-blocking for now
+        cargo audit || true  
+
+    - name: 🕵️‍♀️ Workflow Dosyasını Doğrula (Verify Workflow File)
+      run: |
+          echo "--- .github/workflows/multi-env-deploy.yml dosyasının CI'daki içeriği: ---"
+          cat .github/workflows/multi-env-deploy.yml
+          echo "--- Dosya içeriği sonu ---"
 
     - name: 🧹 Clean Cargo Cache Before Tests
       run: cargo clean
