@@ -1,30 +1,14 @@
 use chrono::Utc;
 use serial_test::serial;
+use std::env;
 use todo_api::db::models::User;
 use todo_api::handlers::auth::models::{LoginRequest, RegistrationRequest};
 use todo_api::service::jwt::Service as JwtService;
 
-#[derive(Clone)]
-struct MockConfig {
-    jwt_secret: String,
-    #[allow(dead_code)] // Reserved for future hash testing scenarios
-    hashing_secret: String,
-}
-
-impl MockConfig {
-    fn new() -> Self {
-        Self {
-            jwt_secret: "test_secret_key_for_jwt_that_is_long_enough_for_testing".to_string(),
-            hashing_secret: "test_hashing_secret".to_string(),
-        }
-    }
-}
-
 fn create_jwt_service() -> JwtService {
-    let config = MockConfig::new();
-    JwtService::new(&config.jwt_secret).expect("Failed to create JWT service")
+    let secret = env::var("JWT_SECRET").expect("TEST_JWT_SECRET çevre değişkeni ayarlanmamış!");
+    JwtService::new(&secret).expect("Çevre değişkenindeki secret ile JWT servisi oluşturulamadı")
 }
-
 fn create_test_user() -> User {
     User {
         id: 1,
