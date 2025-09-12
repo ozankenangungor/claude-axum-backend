@@ -50,7 +50,12 @@ async fn auth_middleware(
             error!("!!! TOKEN DOĞRULAMA HATASI: {:?}", e);
         }
 
-        let context_user = verification_result.map_err(|_| StatusCode::UNAUTHORIZED)?;
+        let claims = verification_result.map_err(|_| StatusCode::UNAUTHORIZED)?;
+
+        let context_user = service::jwt::ContextUser {
+            user_id: claims.sub,
+            username: claims.username,
+        };
 
         req.extensions_mut().insert(context_user);
 
