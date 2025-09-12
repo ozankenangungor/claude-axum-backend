@@ -64,6 +64,9 @@ async fn auth_middleware(
 }
 
 /// Create app router for testing and production
+// lib.rs (veya router.rs) - DÜZELTİLMİŞ VE NİHAİ VERSİYON
+
+/// Create app router for testing and production
 pub fn create_app_router(app_state: AppState) -> Router {
     let origin = std::env::var("FRONTEND_URL").unwrap_or_else(|_| "*".to_string());
     let allowed_origin = match origin.parse::<HeaderValue>() {
@@ -77,8 +80,9 @@ pub fn create_app_router(app_state: AppState) -> Router {
         }
     };
 
-    Router::new()
-        // TODO routes with authentication - RESTful endpoints
+    // --- 1. ADIM: SADECE KORUMALI ROTALARI İÇEREN BİR ROUTER OLUŞTUR ---
+    let protected_routes = Router::new()
+        // TODO routes
         .route(
             "/todos",
             get(handlers::todo::list::handler).post(handlers::todo::create::handler),
@@ -90,8 +94,7 @@ pub fn create_app_router(app_state: AppState) -> Router {
                 .patch(handlers::todo::partial_update::handler)
                 .delete(handlers::todo::delete::handler),
         )
-        // Social Media routes with authentication
-        // Posts
+        // Social Media routes
         .route(
             "/posts",
             get(handlers::social::posts::get_feed).post(handlers::social::posts::create_post),
@@ -106,7 +109,6 @@ pub fn create_app_router(app_state: AppState) -> Router {
             "/users/{id}/posts",
             get(handlers::social::posts::get_user_posts),
         )
-        // Follows
         .route(
             "/users/{id}/follow",
             post(handlers::social::follows::follow_user)
@@ -124,7 +126,6 @@ pub fn create_app_router(app_state: AppState) -> Router {
             "/users/{id}/following",
             get(handlers::social::follows::get_following),
         )
-        // Likes
         .route(
             "/posts/{id}/like",
             post(handlers::social::likes::like_post).delete(handlers::social::likes::unlike_post),
@@ -133,35 +134,39 @@ pub fn create_app_router(app_state: AppState) -> Router {
             "/posts/{id}/liked",
             get(handlers::social::likes::check_liked),
         )
-        // Comments
         .route(
             "/posts/{id}/comments",
             get(handlers::social::comments::get_post_comments)
                 .post(handlers::social::comments::create_comment),
         )
-        // Profile
         .route("/profile", get(handlers::social::profile::get_my_profile))
         .route(
             "/users/{id}/profile",
             get(handlers::social::profile::get_profile),
         )
-        // Apply authentication middleware to all protected routes
+        // --- 2. ADIM: AUTH MIDDLEWARE'İ SADECE BU ROUTER'A UYGULA ---
         .route_layer(middleware::from_fn_with_state(
             app_state.clone(),
             auth_middleware,
-        ))
-        // Authentication routes (no middleware needed)
+        ));
+
+    // --- 3. ADIM: SADECE HALKA AÇIK ROTALARI İÇEREN BİR ROUTER OLUŞTUR ---
+    let public_routes = Router::new()
         .route(
             "/auth/register",
             post(handlers::auth::registration::handler),
         )
         .route("/auth/login", post(handlers::auth::login::handler))
-        // Health check endpoint for Cloud Run
-        .route("/health", get(handlers::health::handler))
-        // Add security and performance layers
+        .route("/health", get(handlers::health::handler));
+
+    // --- 4. ADIM: TÜM ROUTER'LARI BİRLEŞTİR VE GLOBAL KATMANLARI EKLE ---
+    Router::new()
+        .merge(public_routes)
+        .merge(protected_routes)
+        // Add security and performance layers to the whole app
         .layer(CompressionLayer::new())
         .layer(TimeoutLayer::new(Duration::from_secs(30)))
-        .layer(RequestBodyLimitLayer::new(1024 * 1024)) // 1MB limit
+        .layer(RequestBodyLimitLayer::new(1024 * 1024))
         .layer(
             CorsLayer::new()
                 .allow_origin(allowed_origin)
