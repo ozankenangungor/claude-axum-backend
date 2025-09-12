@@ -1,68 +1,52 @@
+// src/main.rs (GEÇİCİ VE SON TEŞHİS İÇİN)
+
 use anyhow::Context;
 use std::env;
 use std::sync::Arc;
-use todo_api::{config::Config, create_app_router, db, service, AppState};
-use tracing::info; // info'yu diğer loglar için tutuyoruz
+use todo_api::{create_app_router, db, service, AppState};
+use tracing::info;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // tracing_subscriber yine de kalabilir, diğer loglar için faydalı.
     tracing_subscriber::fmt().json().init();
+    info!("--- NÜKLEER TEST BAŞLADI ---");
 
-    // --- TEŞHİS KODU BAŞLANGICI (println! versiyonu) ---
-    // JWT_SECRET'ı çevre değişkenlerinden manuel olarak oku
-    let jwt_secret_from_env = match env::var("JWT_SECRET") {
-        Ok(secret) => {
-            // Secret'ı standart çıktıya bas (güvenlik için sadece bir kısmını)
-            println!(
-                "PRINTLN TEŞHİS: JWT_SECRET başarıyla okundu. Uzunluk: {}, Başlangıcı: '{}...'",
-                secret.len(),
-                secret.chars().take(4).collect::<String>()
-            );
-            secret
-        }
-        Err(e) => {
-            // Eğer secret bulunamazsa, kritik bir hata bas ve çık
-            println!("PRINTLN KRİTİK HATA: JWT_SECRET çevre değişkeni okunamadı! Hata: {:?}. Uygulama başlatılamıyor.", e);
-            // Bu satırın production loglarında görünmesi, Secret Manager bağlantısının KESİNLİKLE çalışmadığını kanıtlar.
-            std::process::exit(1);
-        }
-    };
-    // --- TEŞHİS KODU BİTİŞİ ---
+    // 1. JWT SECRET'I DOĞRUDAN KODA YAZIYORUZ. ARTIK HİÇBİR DIŞ ETKEN YOK.
+    let hardcoded_jwt_secret = "A1B2C3D4E5F6G7H8A1B2C3D4E5F6G7H8A1B2C3D4E5F6G7H8";
+    info!(
+        "Hard-coded JWT Secret kullanılıyor. Uzunluk: {}",
+        hardcoded_jwt_secret.len()
+    );
 
-    info!("[tracing] Uygulama başlatılıyor...");
+    // 2. DİĞER SECRET'LARI DOĞRUDAN ORTAMDAN OKUYORUZ (CONFIG'İ BYPASS EDİYORUZ)
+    // Not: Bu değişkenler zaten multi-env-deploy.yml tarafından Secret Manager'dan alınıp ortama set ediliyor.
+    let database_url =
+        env::var("DATABASE_URL").context("DATABASE_URL çevre değişkeni bulunamadı!")?;
+    let hashing_secret_key =
+        env::var("HASHING_SECRET_KEY").context("HASHING_SECRET_KEY çevre değişkeni bulunamadı!")?;
 
-    info!("[tracing] Genel yapılandırma (Config) yükleniyor...");
-    let config = Config::from_gcp_secrets().await?;
-    info!("[tracing] Genel yapılandırma başarıyla yüklendi.");
-
-    info!("[tracing] Veritabanı bağlantı havuzu oluşturuluyor...");
-    let db_pool = db::connection_pool(&config.database_url)
-        .await
-        .context("Veritabanı bağlantı havuzu oluşturulamadı")?;
-    info!("[tracing] Veritabanı bağlantı havuzu başarıyla oluşturuldu.");
-
-    info!("[tracing] Veritabanı şeması başlatılıyor...");
+    // 3. SERVİSLERİ OLUŞTURUYORUZ
+    info!("Veritabanı bağlantısı kuruluyor...");
+    let db_pool = db::connection_pool(&database_url).await?;
     db::schema::initialize_schema(&db_pool).await?;
-    info!("[tracing] Veritabanı şeması başarıyla başlatıldı.");
+    info!("Veritabanı bağlantısı başarılı.");
 
-    // Servisleri oluştur
     let todo_service = Arc::new(service::todo::Service::new(db_pool.clone())?);
 
-    // JWT Servisini, manuel olarak okuduğumuz ve logladığımız secret ile oluştur.
-    let jwt_service = Arc::new(
-        service::jwt::Service::new(&jwt_secret_from_env)
-            .context("TEŞHİS: Manuel olarak okunan JWT_SECRET ile JWT servisi oluşturulamadı!")?,
-    );
-    info!("[tracing] JWT servisi başarıyla oluşturuldu.");
+    // JWT Servisini sabit kodlanmış secret ile oluşturuyoruz.
+    let jwt_service = Arc::new(service::jwt::Service::new(hardcoded_jwt_secret)?);
 
     let auth_service = Arc::new(service::auth::Service::new(
         jwt_service.clone(),
         db_pool.clone(),
-        config.hashing_secret_key.clone(),
+        hashing_secret_key,
     )?);
+
     let social_service = Arc::new(service::social::SocialService::new(db_pool.clone()));
 
+    info!("Tüm servisler başarıyla oluşturuldu.");
+
+    // 4. UYGULAMAYI BAŞLATIYORUZ
     let app_state = AppState {
         todo_service,
         auth_service,
@@ -72,11 +56,11 @@ async fn main() -> anyhow::Result<()> {
 
     let router = create_app_router(app_state);
 
-    let port = std::env::var("PORT").unwrap_or_else(|_| config.server_port.to_string());
+    let port = env::var("PORT").unwrap_or_else(|_| "8080".to_string());
     let host = "0.0.0.0";
 
     let listener = tokio::net::TcpListener::bind(format!("{}:{}", host, port)).await?;
-    info!("[tracing] Sunucu {}:{} adresinde dinleniyor...", host, port);
+    info!("Sunucu {}:{} adresinde dinleniyor...", host, port);
     axum::serve(listener, router).await?;
     Ok(())
 }
