@@ -1,37 +1,65 @@
+// src/main.rs (GÜNCELLENMİŞ VE TEŞHİS KODU EKLENMİŞ HALİ)
+
 use anyhow::Context;
+use std::env; // <-- Bu satırı ekledik
 use std::sync::Arc;
 use todo_api::{config::Config, create_app_router, db, service, AppState};
+use tracing::{error, info}; // <-- error ve info'yu ekledik
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // Initialize structured logging (JSON format for Cloud Logging)
-    tracing_subscriber::fmt()
-        .json() // JSON formatında loglama için
-        .init();
+    // Loglamayı başlat
+    tracing_subscriber::fmt().json().init();
 
-    tracing::info!("Starting application...");
+    info!("Uygulama başlatılıyor...");
 
-    tracing::info!("Loading configuration from Google Secret Manager...");
-    // --- The key change is here ---
+    // --- TEŞHİS KODU BAŞLANGICI ---
+    // JWT_SECRET'ı çevre değişkenlerinden manuel olarak oku
+    let jwt_secret_from_env = match env::var("JWT_SECRET") {
+        Ok(secret) => {
+            // Secret'ı logla (güvenlik için sadece bir kısmını)
+            info!(
+                "TEŞHİS: JWT_SECRET başarıyla okundu. Uzunluk: {}, Başlangıcı: '{}...'",
+                secret.len(),
+                secret.chars().take(4).collect::<String>()
+            );
+            secret
+        }
+        Err(e) => {
+            // Eğer secret bulunamazsa, kritik bir hata logu bas ve çık
+            error!("KRİTİK HATA: JWT_SECRET çevre değişkeni okunamadı! Hata: {:?}. Uygulama başlatılamıyor.", e);
+            // Bu satırın production loglarında görünmesi, Secret Manager bağlantısının KESİNLİKLE çalışmadığını kanıtlar.
+            std::process::exit(1);
+        }
+    };
+    // --- TEŞHİS KODU BİTİŞİ ---
+
+    info!("Genel yapılandırma (Config) yükleniyor...");
     let config = Config::from_gcp_secrets().await?;
-    // ----------------------------
-    tracing::info!("Configuration successfully loaded.");
+    info!("Genel yapılandırma başarıyla yüklendi.");
 
-    tracing::info!("Initializing database connection pool for Neon DB...");
-    // The connection_pool function now accepts the database_url as an argument.
+    info!("Veritabanı bağlantı havuzu oluşturuluyor...");
     let db_pool = db::connection_pool(&config.database_url)
         .await
-        .context("Failed to create database connection pool for Neon")?;
-    tracing::info!("Database connection pool successfully created.");
+        .context("Veritabanı bağlantı havuzu oluşturulamadı")?;
+    info!("Veritabanı bağlantı havuzu başarıyla oluşturuldu.");
 
-    // Schema initialization - manuel schema kurulumu yapıyoruz
-    tracing::info!("Initializing database schema...");
+    info!("Veritabanı şeması başlatılıyor...");
     db::schema::initialize_schema(&db_pool).await?;
-    tracing::info!("Database schema successfully initialized.");
+    info!("Veritabanı şeması başarıyla başlatıldı.");
 
-    // Initialize all services with single connection pool instance
+    // Servisleri oluştur
     let todo_service = Arc::new(service::todo::Service::new(db_pool.clone())?);
-    let jwt_service = Arc::new(service::jwt::Service::new(&config.jwt_secret)?);
+
+    // --- DEĞİŞTİRİLMİŞ JWT SERVİSİ OLUŞTURMA ---
+    // JWT Servisini, config'den gelen yerine, manuel olarak okuduğumuz ve logladığımız secret ile oluştur.
+    let jwt_service = Arc::new(
+        service::jwt::Service::new(&jwt_secret_from_env)
+            .context("TEŞHİS: Manuel olarak okunan JWT_SECRET ile JWT servisi oluşturulamadı!")?,
+    );
+    info!("JWT servisi başarıyla oluşturuldu.");
+    // --- DEĞİŞİKLİK BİTİŞİ ---
+
     let auth_service = Arc::new(service::auth::Service::new(
         jwt_service.clone(),
         db_pool.clone(),
@@ -39,7 +67,6 @@ async fn main() -> anyhow::Result<()> {
     )?);
     let social_service = Arc::new(service::social::SocialService::new(db_pool.clone()));
 
-    // Create application state
     let app_state = AppState {
         todo_service,
         auth_service,
@@ -47,16 +74,13 @@ async fn main() -> anyhow::Result<()> {
         social_service,
     };
 
-    // Create router
     let router = create_app_router(app_state);
 
-    // Cloud Run için portu ortam değişkeninden oku, yoksa config'den al
     let port = std::env::var("PORT").unwrap_or_else(|_| config.server_port.to_string());
-    // Cloud Run için host her zaman 0.0.0.0 olmalı
     let host = "0.0.0.0";
 
     let listener = tokio::net::TcpListener::bind(format!("{}:{}", host, port)).await?;
-    tracing::info!("Server starting to listen on {}:{}...", host, port);
+    info!("Sunucu {}:{} adresinde dinleniyor...", host, port);
     axum::serve(listener, router).await?;
     Ok(())
 }
