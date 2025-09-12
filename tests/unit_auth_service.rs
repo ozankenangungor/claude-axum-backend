@@ -276,8 +276,11 @@ async fn test_clone_operations() {
 #[tokio::test]
 #[serial]
 async fn test_jwt_service_with_different_secrets() {
-    let jwt_service1 = JwtService::new("secret1").expect("Failed to create JWT service 1");
-    let jwt_service2 = JwtService::new("secret2").expect("Failed to create JWT service 2");
+    // "secret1" ve "secret2" yerine geçerli Base64 değerleri kullandık
+    let jwt_service1 = JwtService::new("dGhpcyBpcyB0ZXN0IHNlY3JldCBudW1iZXIgb25lISE=")
+        .expect("Failed to create JWT service 1");
+    let jwt_service2 = JwtService::new("dGhpcyBpcyB0ZXN0IHNlY3JldCBudW1iZXIgdHdvISE=")
+        .expect("Failed to create JWT service 2");
 
     let user = create_test_user();
 
