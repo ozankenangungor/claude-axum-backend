@@ -1,64 +1,60 @@
-// src/main.rs (GÜNCELLENMİŞ VE TEŞHİS KODU EKLENMİŞ HALİ)
-
 use anyhow::Context;
-use std::env; // <-- Bu satırı ekledik
+use std::env;
 use std::sync::Arc;
 use todo_api::{config::Config, create_app_router, db, service, AppState};
-use tracing::{error, info}; // <-- error ve info'yu ekledik
+use tracing::info; // info'yu diğer loglar için tutuyoruz
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // Loglamayı başlat
+    // tracing_subscriber yine de kalabilir, diğer loglar için faydalı.
     tracing_subscriber::fmt().json().init();
 
-    info!("Uygulama başlatılıyor...");
-
-    // --- TEŞHİS KODU BAŞLANGICI ---
+    // --- TEŞHİS KODU BAŞLANGICI (println! versiyonu) ---
     // JWT_SECRET'ı çevre değişkenlerinden manuel olarak oku
     let jwt_secret_from_env = match env::var("JWT_SECRET") {
         Ok(secret) => {
-            // Secret'ı logla (güvenlik için sadece bir kısmını)
-            info!(
-                "TEŞHİS: JWT_SECRET başarıyla okundu. Uzunluk: {}, Başlangıcı: '{}...'",
+            // Secret'ı standart çıktıya bas (güvenlik için sadece bir kısmını)
+            println!(
+                "PRINTLN TEŞHİS: JWT_SECRET başarıyla okundu. Uzunluk: {}, Başlangıcı: '{}...'",
                 secret.len(),
                 secret.chars().take(4).collect::<String>()
             );
             secret
         }
         Err(e) => {
-            // Eğer secret bulunamazsa, kritik bir hata logu bas ve çık
-            error!("KRİTİK HATA: JWT_SECRET çevre değişkeni okunamadı! Hata: {:?}. Uygulama başlatılamıyor.", e);
+            // Eğer secret bulunamazsa, kritik bir hata bas ve çık
+            println!("PRINTLN KRİTİK HATA: JWT_SECRET çevre değişkeni okunamadı! Hata: {:?}. Uygulama başlatılamıyor.", e);
             // Bu satırın production loglarında görünmesi, Secret Manager bağlantısının KESİNLİKLE çalışmadığını kanıtlar.
             std::process::exit(1);
         }
     };
     // --- TEŞHİS KODU BİTİŞİ ---
 
-    info!("Genel yapılandırma (Config) yükleniyor...");
-    let config = Config::from_gcp_secrets().await?;
-    info!("Genel yapılandırma başarıyla yüklendi.");
+    info!("[tracing] Uygulama başlatılıyor...");
 
-    info!("Veritabanı bağlantı havuzu oluşturuluyor...");
+    info!("[tracing] Genel yapılandırma (Config) yükleniyor...");
+    let config = Config::from_gcp_secrets().await?;
+    info!("[tracing] Genel yapılandırma başarıyla yüklendi.");
+
+    info!("[tracing] Veritabanı bağlantı havuzu oluşturuluyor...");
     let db_pool = db::connection_pool(&config.database_url)
         .await
         .context("Veritabanı bağlantı havuzu oluşturulamadı")?;
-    info!("Veritabanı bağlantı havuzu başarıyla oluşturuldu.");
+    info!("[tracing] Veritabanı bağlantı havuzu başarıyla oluşturuldu.");
 
-    info!("Veritabanı şeması başlatılıyor...");
+    info!("[tracing] Veritabanı şeması başlatılıyor...");
     db::schema::initialize_schema(&db_pool).await?;
-    info!("Veritabanı şeması başarıyla başlatıldı.");
+    info!("[tracing] Veritabanı şeması başarıyla başlatıldı.");
 
     // Servisleri oluştur
     let todo_service = Arc::new(service::todo::Service::new(db_pool.clone())?);
 
-    // --- DEĞİŞTİRİLMİŞ JWT SERVİSİ OLUŞTURMA ---
-    // JWT Servisini, config'den gelen yerine, manuel olarak okuduğumuz ve logladığımız secret ile oluştur.
+    // JWT Servisini, manuel olarak okuduğumuz ve logladığımız secret ile oluştur.
     let jwt_service = Arc::new(
         service::jwt::Service::new(&jwt_secret_from_env)
             .context("TEŞHİS: Manuel olarak okunan JWT_SECRET ile JWT servisi oluşturulamadı!")?,
     );
-    info!("JWT servisi başarıyla oluşturuldu.");
-    // --- DEĞİŞİKLİK BİTİŞİ ---
+    info!("[tracing] JWT servisi başarıyla oluşturuldu.");
 
     let auth_service = Arc::new(service::auth::Service::new(
         jwt_service.clone(),
@@ -80,7 +76,7 @@ async fn main() -> anyhow::Result<()> {
     let host = "0.0.0.0";
 
     let listener = tokio::net::TcpListener::bind(format!("{}:{}", host, port)).await?;
-    info!("Sunucu {}:{} adresinde dinleniyor...", host, port);
+    info!("[tracing] Sunucu {}:{} adresinde dinleniyor...", host, port);
     axum::serve(listener, router).await?;
     Ok(())
 }
