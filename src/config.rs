@@ -141,7 +141,7 @@ async fn fetch_secret_with_sdk(
         .ok_or_else(|| anyhow::anyhow!("Secret '{}' has no payload", secret_name))?
         .data;
 
-    // Convert Bytes to UTF-8 string
     String::from_utf8(secret_data.to_vec())
         .with_context(|| format!("The secret '{}' was not valid UTF-8", secret_name))
+        .map(|s| s.trim().to_string())
 }
