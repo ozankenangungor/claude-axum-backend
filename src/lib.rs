@@ -33,6 +33,7 @@ async fn auth_middleware(
     next: Next,
 ) -> Result<Response, StatusCode> {
     info!(">>> Auth middleware çalıştı! Token kontrol ediliyor...");
+    println!(">>> Auth middleware çalıştı! Token kontrol ediliyor...");
     if let Some(auth_header) = req.headers().get(http::header::AUTHORIZATION) {
         let auth_header_content = auth_header.to_str().map_err(|_| StatusCode::UNAUTHORIZED)?;
         if !auth_header_content.starts_with("Bearer ") {
@@ -40,20 +41,16 @@ async fn auth_middleware(
         }
         let auth_token = auth_header_content.replace("Bearer ", "");
 
-        // --- DEĞİŞİKLİK BURADA BAŞLIYOR ---
-
-        // 1. Token doğrulama işlemini yap ve sonucunu bir değişkende tut.
         let verification_result = jwt_service.verify_token(auth_token);
 
         // 2. Eğer sonuç bir hata ise (Err), hatanın içeriğini log'lara yazdır.
         if let Err(e) = &verification_result {
+            println!("!!! TOKEN DOĞRULAMA HATASI: {:?}", e);
+
             error!("!!! TOKEN DOĞRULAMA HATASI: {:?}", e);
         }
 
-        // 3. Orijinal kod gibi devam et, hata varsa Unauthorized döndür.
         let context_user = verification_result.map_err(|_| StatusCode::UNAUTHORIZED)?;
-
-        // --- DEĞİŞİKLİK BURADA BİTİYOR ---
 
         req.extensions_mut().insert(context_user);
 
@@ -63,10 +60,6 @@ async fn auth_middleware(
     Err(StatusCode::UNAUTHORIZED)
 }
 
-/// Create app router for testing and production
-// lib.rs (veya router.rs) - DÜZELTİLMİŞ VE NİHAİ VERSİYON
-
-/// Create app router for testing and production
 pub fn create_app_router(app_state: AppState) -> Router {
     let origin = std::env::var("FRONTEND_URL").unwrap_or_else(|_| "*".to_string());
     let allowed_origin = match origin.parse::<HeaderValue>() {
@@ -80,9 +73,7 @@ pub fn create_app_router(app_state: AppState) -> Router {
         }
     };
 
-    // --- 1. ADIM: SADECE KORUMALI ROTALARI İÇEREN BİR ROUTER OLUŞTUR ---
     let protected_routes = Router::new()
-        // TODO routes
         .route(
             "/todos",
             get(handlers::todo::list::handler).post(handlers::todo::create::handler),
@@ -94,7 +85,6 @@ pub fn create_app_router(app_state: AppState) -> Router {
                 .patch(handlers::todo::partial_update::handler)
                 .delete(handlers::todo::delete::handler),
         )
-        // Social Media routes
         .route(
             "/posts",
             get(handlers::social::posts::get_feed).post(handlers::social::posts::create_post),
@@ -144,13 +134,11 @@ pub fn create_app_router(app_state: AppState) -> Router {
             "/users/{id}/profile",
             get(handlers::social::profile::get_profile),
         )
-        // --- 2. ADIM: AUTH MIDDLEWARE'İ SADECE BU ROUTER'A UYGULA ---
         .route_layer(middleware::from_fn_with_state(
             app_state.clone(),
             auth_middleware,
         ));
 
-    // --- 3. ADIM: SADECE HALKA AÇIK ROTALARI İÇEREN BİR ROUTER OLUŞTUR ---
     let public_routes = Router::new()
         .route(
             "/auth/register",
@@ -159,11 +147,9 @@ pub fn create_app_router(app_state: AppState) -> Router {
         .route("/auth/login", post(handlers::auth::login::handler))
         .route("/health", get(handlers::health::handler));
 
-    // --- 4. ADIM: TÜM ROUTER'LARI BİRLEŞTİR VE GLOBAL KATMANLARI EKLE ---
     Router::new()
         .merge(public_routes)
         .merge(protected_routes)
-        // Add security and performance layers to the whole app
         .layer(CompressionLayer::new())
         .layer(TimeoutLayer::new(Duration::from_secs(30)))
         .layer(RequestBodyLimitLayer::new(1024 * 1024))
