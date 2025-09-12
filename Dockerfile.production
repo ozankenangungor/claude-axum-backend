@@ -3,7 +3,7 @@
 
 # Stage 1: Build environment with cargo-chef
 # Using "bookworm" for a more secure and up-to-date base OS
-FROM rust:1.89-bookworm AS builder
+FROM --platform=linux/amd64 rust:1.89-bookworm AS builder
 
 # Install build dependencies and cargo-chef in one layer
 RUN apt-get update && apt-get install -y \
