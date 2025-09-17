@@ -1,6 +1,10 @@
 # --- Stage 1: Builder ---
-# Rust derleme ortamını kur - nightly edition2024 support için
-FROM rust:nightly AS builder
+# Rust derleme ortamını kur - latest stable with nightly toolchain
+FROM rust:1.81 AS builder
+
+# Install nightly toolchain for edition2024 support
+RUN rustup toolchain install nightly
+RUN rustup default nightly
 
 # Çalışma dizinini oluştur
 WORKDIR /usr/src/app
