@@ -1,54 +1,41 @@
-use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
+use axum::{extract::State, response::IntoResponse, Json};
 use validator::Validate;
 
 use crate::{
-    handlers::{
-        auth::models::{LoginRequest, LoginResponse},
-        models::{ErrorResponse, JsonResponse},
-    },
-    service::auth::Error,
+    error::{AppError, AppResult, ErrorSeverity},
+    handlers::auth::models::LoginRequest,
     AppState,
 };
 
 pub async fn handler(
     State(AppState { auth_service, .. }): State<AppState>,
     Json(request): Json<LoginRequest>,
-) -> impl IntoResponse {
+) -> AppResult<impl IntoResponse> {
+    // Validate request
     if let Err(validation_errors) = request.validate() {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(JsonResponse::Error(ErrorResponse::new_from_str(&format!(
-                "Validation error: {}",
-                validation_errors
-            )))),
-        );
+        return Err(AppError::from(validation_errors));
     }
 
-    match auth_service.login(request).await {
-        Ok(token) => (
-            StatusCode::OK,
-            Json(JsonResponse::Success(LoginResponse { token })),
-        ),
-        Err(error) => {
-            let message = match error {
-                Error::InvalidPassword => "Invalid password".to_string(),
-                Error::UserNotFound => "User not found".to_string(),
-                Error::UsernameAlreadyExists(_)
-                | Error::ConnectionPool(_)
-                | Error::Sqlx(_)
-                | Error::Hashing(_)
-                | Error::EnvVar(_)
-                | Error::JwtService(_)
-                | Error::WeakPassword(_) => {
-                    tracing::error!("Login error: {:?}", error);
-                    "Internal server error".to_string()
-                }
-            };
-
-            (
-                StatusCode::BAD_REQUEST,
-                Json(JsonResponse::Error(ErrorResponse::new_from_str(&message))),
-            )
+    // Attempt login with proper error context
+    let token = auth_service.login(request).await.map_err(|e| {
+        let mut error = AppError::from(e);
+        // Add specific context for login failures
+        if let AppError::Authentication {
+            ref mut context, ..
+        } = error
+        {
+            context
+                .additional_data
+                .insert("operation".to_string(), "user_login".to_string());
+            context.severity = ErrorSeverity::Medium;
         }
-    }
+        error
+    })?;
+
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "data": {
+            "token": token
+        }
+    })))
 }

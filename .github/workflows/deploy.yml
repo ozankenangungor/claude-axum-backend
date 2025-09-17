@@ -1,0 +1,119 @@
+name: Deploy to Google Cloud Run
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  PROJECT_ID: velvety-matter-471516-n4
+  SERVICE: todo-api
+  REGION: us-central1
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        override: true
+        components: rustfmt, clippy
+        
+    - name: Cache cargo dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        
+    - name: Run tests
+      run: cargo test --verbose
+      
+    - name: Run clippy
+      run: cargo clippy -- -D warnings
+      
+    - name: Check formatting
+      run: cargo fmt -- --check
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Google Auth
+      id: auth
+      uses: 'google-github-actions/auth@v2'
+      with:
+        project_id: '${{ env.PROJECT_ID }}'
+        service_account: 'github-actions@velvety-matter-471516-n4.iam.gserviceaccount.com'
+        workload_identity_provider: 'projects/364661851580/locations/global/workloadIdentityPools/github-actions-pool/providers/github-actions-provider'
+
+    - name: Set up Cloud SDK
+      uses: 'google-github-actions/setup-gcloud@v2'
+
+    - name: Configure Docker to use gcloud as a credential helper
+      run: gcloud auth configure-docker
+
+    - name: Build and push Docker image
+      run: |
+        # Build the Docker image
+        docker build -t gcr.io/$PROJECT_ID/$SERVICE:$GITHUB_SHA .
+        docker build -t gcr.io/$PROJECT_ID/$SERVICE:latest .
+        
+        # Push the Docker image to Google Container Registry
+        docker push gcr.io/$PROJECT_ID/$SERVICE:$GITHUB_SHA
+        docker push gcr.io/$PROJECT_ID/$SERVICE:latest
+
+    - name: Deploy to Cloud Run
+      run: |
+        gcloud run deploy $SERVICE \
+          --image gcr.io/$PROJECT_ID/$SERVICE:$GITHUB_SHA \
+          --region $REGION \
+          --platform managed \
+          --allow-unauthenticated \
+          --memory 1Gi \
+          --cpu 2 \
+          --max-instances 100 \
+          --min-instances 1 \
+          --timeout 300 \
+          --concurrency 80 \
+          --service-account todo-api@$PROJECT_ID.iam.gserviceaccount.com \
+          --set-env-vars="RUST_ENV=production,RUST_LOG=info,PORT=8080,HOST=0.0.0.0,GCP_PROJECT_ID=$PROJECT_ID,NEON_BRANCH=main" \
+          --port 8080 \
+          --execution-environment gen2
+
+    - name: Get service URL
+      run: |
+        SERVICE_URL=$(gcloud run services describe $SERVICE --region=$REGION --format='value(status.url)')
+        echo "Service deployed to: $SERVICE_URL"
+        echo "SERVICE_URL=$SERVICE_URL" >> $GITHUB_ENV
+
+    - name: Test deployment
+      run: |
+        echo "Testing health endpoint..."
+        curl -f $SERVICE_URL/health || exit 1
+        echo "✅ Health check passed!"
+
+    - name: Notify deployment success
+      run: |
+        echo "🎉 Deployment successful!"
+        echo "Service URL: $SERVICE_URL"
+        echo "Health check: $SERVICE_URL/health"

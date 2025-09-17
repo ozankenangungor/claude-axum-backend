@@ -59,12 +59,19 @@ impl Service {
             ));
         }
 
-        let has_uppercase = Regex::new(r"[A-Z]").unwrap().is_match(password);
-        let has_lowercase = Regex::new(r"[a-z]").unwrap().is_match(password);
-        let has_digit = Regex::new(r"\d").unwrap().is_match(password);
+        // These regex patterns are static and known to be valid, but let's handle them gracefully
+        let has_uppercase = Regex::new(r"[A-Z]")
+            .map(|re| re.is_match(password))
+            .unwrap_or(false);
+        let has_lowercase = Regex::new(r"[a-z]")
+            .map(|re| re.is_match(password))
+            .unwrap_or(false);
+        let has_digit = Regex::new(r"\d")
+            .map(|re| re.is_match(password))
+            .unwrap_or(false);
         let has_special = Regex::new(r"[!@#$%^&*()_+\-=\[\]{};':.,<>/?]")
-            .unwrap()
-            .is_match(password);
+            .map(|re| re.is_match(password))
+            .unwrap_or(false);
 
         if !has_uppercase {
             return Err(Error::WeakPassword(

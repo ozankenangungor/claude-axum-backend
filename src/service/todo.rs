@@ -28,6 +28,11 @@ impl Service {
         Ok(Self { db_pool })
     }
 
+    /// Get reference to the database pool for health checks
+    pub fn get_pool(&self) -> &PgPool {
+        &self.db_pool
+    }
+
     pub async fn create(
         &self,
         user_id: i32,

@@ -13,10 +13,16 @@ use tower_http::{
     compression::CompressionLayer, cors::CorsLayer, limit::RequestBodyLimitLayer,
     timeout::TimeoutLayer,
 };
+use crate::rate_limiter::{global_rate_limit_middleware, auth_rate_limit_middleware};
+use crate::monitoring::{request_metrics_middleware, error_tracking_middleware};
+use crate::error::error_correlation_middleware;
 use tracing::{error, info};
 pub mod config;
 pub mod db;
+pub mod error;
 pub mod handlers;
+pub mod monitoring;
+pub mod rate_limiter;
 pub mod service;
 
 #[derive(Clone)]
@@ -71,10 +77,11 @@ pub fn create_app_router(app_state: AppState) -> Router {
         Ok(header_value) => header_value,
         Err(_) => {
             tracing::error!(
-                "Geçersiz FRONTEND_URL değeri: '{}'. Sunucu başlatılamadı.",
+                "Geçersiz FRONTEND_URL değeri: '{}'. Varsayılan '*' kullanılıyor.",
                 origin
             );
-            panic!("Geçersiz FRONTEND_URL yapılandırması.");
+            // Fallback to wildcard instead of panicking
+            HeaderValue::from_static("*")
         }
     };
 
@@ -144,17 +151,25 @@ pub fn create_app_router(app_state: AppState) -> Router {
             auth_middleware,
         ));
 
-    let public_routes = Router::new()
+    let auth_routes = Router::new()
         .route(
             "/auth/register",
             post(handlers::auth::registration::handler),
         )
         .route("/auth/login", post(handlers::auth::login::handler))
+        .layer(middleware::from_fn(auth_rate_limit_middleware));
+
+    let public_routes = Router::new()
+        .merge(auth_routes)
         .route("/health", get(handlers::health::handler));
 
     Router::new()
         .merge(public_routes)
         .merge(protected_routes)
+        .layer(middleware::from_fn(error_correlation_middleware)) // Add correlation IDs
+        .layer(middleware::from_fn(error_tracking_middleware)) // Track error patterns
+        .layer(middleware::from_fn(request_metrics_middleware)) // Request metrics and tracing
+        .layer(middleware::from_fn(global_rate_limit_middleware)) // Global rate limiting - 100 req/min per IP
         .layer(CompressionLayer::new())
         .layer(TimeoutLayer::new(Duration::from_secs(30)))
         .layer(RequestBodyLimitLayer::new(1024 * 1024))

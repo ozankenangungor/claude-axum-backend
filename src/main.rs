@@ -1,58 +1,42 @@
-use anyhow::Context;
-use std::env;
 use std::sync::Arc;
-use todo_api::{create_app_router, db, service, AppState};
-use tokio::net::TcpListener;
-use tracing::info;
+use todo_api::{config::Config, create_app_router, db, service, AppState};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt().json().init();
+    // Cloud Run için JSON formatında loglama başlat
+    tracing_subscriber::fmt()
+        .json() // JSON formatında loglama için
+        .init();
 
-    println!("[PRINTLN] --- NÜKLEER TEST BAŞLADI (vFinal) ---");
-    info!("[TRACING] --- NÜKLEER TEST BAŞLADI (vFinal) ---");
+    tracing::info!("Yapılandırma yükleniyor...");
 
-    let hardcoded_jwt_secret = "A1B2C3D4E5F6G7H8A1B2C3D4E5F6G7H8A1B2C3D4E5F6G7H8";
-    println!(
-        "[PRINTLN] Hard-coded JWT Secret kullanılıyor. Uzunluk: {}",
-        hardcoded_jwt_secret.len()
-    );
-    info!(
-        "[TRACING] Hard-coded JWT Secret kullanılıyor. Uzunluk: {}",
-        hardcoded_jwt_secret.len()
-    );
+    // Auto-detect environment and load configuration
+    // Production (Cloud Run + Neon) -> Google Secret Manager
+    // Development -> Environment variables
+    let config = Config::auto_load().await?;
 
-    println!("[PRINTLN] Diğer secret'lar ortamdan okunuyor...");
-    info!("[TRACING] Diğer secret'lar ortamdan okunuyor...");
-    let database_url =
-        env::var("DATABASE_URL").context("DATABASE_URL çevre değişkeni bulunamadı!")?;
-    let hashing_secret_key =
-        env::var("HASHING_SECRET_KEY").context("HASHING_SECRET_KEY çevre değişkeni bulunamadı!")?;
-    println!("[PRINTLN] Diğer secret'lar başarıyla okundu.");
-    info!("[TRACING] Diğer secret'lar başarıyla okundu.");
+    // Initialize database connection pool
+    let db_pool = db::connection_pool(&config.database_url).await?;
 
-    println!("[PRINTLN] Veritabanı bağlantısı kuruluyor...");
-    info!("[TRACING] Veritabanı bağlantısı kuruluyor...");
-    let db_pool = db::connection_pool(&database_url).await?;
+    // Schema initialization - manuel schema kurulumu yapıyoruz
+    tracing::info!("Veritabanı şeması başlatılıyor...");
     db::schema::initialize_schema(&db_pool).await?;
-    println!("[PRINTLN] Veritabanı bağlantısı başarılı.");
-    info!("[TRACING] Veritabanı bağlantısı başarılı.");
+    tracing::info!("Veritabanı şeması başarıyla başlatıldı.");
 
+    // Initialize all services with single connection pool instance
     let todo_service = Arc::new(service::todo::Service::new(db_pool.clone())?);
-
-    let jwt_service = Arc::new(service::jwt::Service::new(hardcoded_jwt_secret)?);
-
+    let jwt_service = Arc::new(service::jwt::Service::new(&config.jwt_secret)?);
     let auth_service = Arc::new(service::auth::Service::new(
         jwt_service.clone(),
         db_pool.clone(),
-        hashing_secret_key,
+        config.hashing_secret_key.clone(),
     )?);
 
     let social_service = Arc::new(service::social::SocialService::new(db_pool.clone()));
 
-    println!("[PRINTLN] Tüm servisler başarıyla oluşturuldu.");
-    info!("[TRACING] Tüm servisler başarıyla oluşturuldu.");
+    tracing::info!("Tüm servisler başarıyla oluşturuldu.");
 
+    // Create application state
     let app_state = AppState {
         todo_service,
         auth_service,
@@ -60,17 +44,16 @@ async fn main() -> anyhow::Result<()> {
         social_service,
     };
 
+    // Create router
     let router = create_app_router(app_state);
 
-    let port = env::var("PORT").unwrap_or_else(|_| "8080".to_string());
+    // Cloud Run için portu ortam değişkeninden oku, yoksa config'den al
+    let port = std::env::var("PORT").unwrap_or_else(|_| config.server_port.to_string());
+    // Cloud Run için host her zaman 0.0.0.0 olmalı
     let host = "0.0.0.0";
-    let addr_str = format!("{}:{}", host, port);
-    let listener = TcpListener::bind(&addr_str).await?;
 
-    println!("[PRINTLN] Sunucu {} adresinde dinleniyor...", addr_str);
-    info!("[TRACING] Sunucu {} adresinde dinleniyor...", addr_str);
-
+    let listener = tokio::net::TcpListener::bind(format!("{}:{}", host, port)).await?;
+    tracing::info!("Sunucu {}:{} adresinde dinlemede...", host, port);
     axum::serve(listener, router).await?;
-
     Ok(())
 }

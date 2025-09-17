@@ -2,14 +2,26 @@ use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-static VALID_USERNAME: Lazy<regex::Regex> =
-    Lazy::new(|| regex::Regex::new(r"^[a-zA-Z0-9_]+$").unwrap());
+static VALID_USERNAME: Lazy<Option<regex::Regex>> =
+    Lazy::new(|| regex::Regex::new(r"^[a-zA-Z0-9_]+$").ok());
 
 fn validate_username(username: &str) -> Result<(), validator::ValidationError> {
-    if !VALID_USERNAME.is_match(username) {
-        return Err(validator::ValidationError::new("invalid_username"));
+    match VALID_USERNAME.as_ref() {
+        Some(regex) => {
+            if !regex.is_match(username) {
+                return Err(validator::ValidationError::new("invalid_username"));
+            }
+            Ok(())
+        }
+        None => {
+            // Regex failed to compile, fall back to basic validation
+            if username.chars().all(|c| c.is_alphanumeric() || c == '_') {
+                Ok(())
+            } else {
+                Err(validator::ValidationError::new("invalid_username"))
+            }
+        }
     }
-    Ok(())
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
