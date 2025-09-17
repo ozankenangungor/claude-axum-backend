@@ -1,16 +1,9 @@
-use axum::{
-    extract::Request,
-    middleware::Next,
-    response::Response,
-};
+use axum::{extract::Request, middleware::Next, response::Response};
 use std::time::Instant;
 use tracing::{info, info_span, Instrument};
 
 /// Request tracing middleware with performance logging
-pub async fn request_metrics_middleware(
-    request: Request,
-    next: Next,
-) -> Response {
+pub async fn request_metrics_middleware(request: Request, next: Next) -> Response {
     let start = Instant::now();
     let method = request.method().clone();
     let uri = request.uri().clone();
@@ -30,7 +23,7 @@ pub async fn request_metrics_middleware(
             path = %path,
             "Processing request"
         );
-        
+
         let response = next.run(request).await;
         let status = response.status();
         let duration = start.elapsed();
@@ -59,10 +52,14 @@ fn normalize_path(path: &str) -> String {
         if segment.is_empty() {
             continue;
         }
-        
+
         // Check if segment looks like an ID (numeric or UUID-like)
-        if segment.chars().all(|c| c.is_ascii_digit()) 
-            || (segment.len() >= 8 && segment.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')) {
+        if segment.chars().all(|c| c.is_ascii_digit())
+            || (segment.len() >= 8
+                && segment
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '-'))
+        {
             normalized.push("{id}");
         } else {
             normalized.push(segment);
@@ -96,10 +93,7 @@ pub fn log_db_query(query_type: &str, table: &str, duration: std::time::Duration
 }
 
 /// Error tracking middleware - tracks error patterns and frequencies
-pub async fn error_tracking_middleware(
-    request: Request,
-    next: Next,
-) -> Response {
+pub async fn error_tracking_middleware(request: Request, next: Next) -> Response {
     let start = std::time::Instant::now();
     let method = request.method().clone();
     let uri = request.uri().clone();
@@ -118,7 +112,7 @@ pub async fn error_tracking_middleware(
             duration_ms = %duration.as_millis(),
             "Error response"
         );
-        
+
         // In production, you could also:
         // - Increment error counters by endpoint
         // - Track error patterns for alerting
@@ -150,7 +144,7 @@ mod tests {
         assert_eq!(normalize_path("/"), "/");
         assert_eq!(normalize_path(""), "/");
         assert_eq!(
-            normalize_path("/users/abc-123-def-456/profile"), 
+            normalize_path("/users/abc-123-def-456/profile"),
             "/users/{id}/profile"
         );
     }

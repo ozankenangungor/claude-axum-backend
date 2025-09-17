@@ -8,15 +8,15 @@ use axum::{
 use serde_json::json;
 use std::collections::HashMap;
 use thiserror::Error;
-use tracing::{error, warn, info};
+use tracing::{error, info, warn};
 use uuid::Uuid;
 
 /// Error severity levels for logging and alerting
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ErrorSeverity {
-    Low,    // Non-critical errors, expected failures
-    Medium, // Important errors that need attention
-    High,   // Critical errors affecting service availability
+    Low,      // Non-critical errors, expected failures
+    Medium,   // Important errors that need attention
+    High,     // Critical errors affecting service availability
     Critical, // System-wide failures requiring immediate action
 }
 
@@ -78,44 +78,44 @@ pub enum AppError {
         source: sqlx::Error,
         context: ErrorContext,
     },
-    
+
     #[error("Authentication failed: {message}")]
     Authentication {
         message: String,
         context: ErrorContext,
     },
-    
+
     #[error("Authorization denied: {message}")]
     Authorization {
         message: String,
         context: ErrorContext,
     },
-    
+
     #[error("Validation failed: {message}")]
     Validation {
         message: String,
         field_errors: Option<HashMap<String, Vec<String>>>,
         context: ErrorContext,
     },
-    
+
     #[error("Resource not found: {resource}")]
     NotFound {
         resource: String,
         context: ErrorContext,
     },
-    
+
     #[error("Resource conflict: {message}")]
     Conflict {
         message: String,
         context: ErrorContext,
     },
-    
+
     #[error("Rate limit exceeded")]
     RateLimitExceeded {
         retry_after: Option<u64>,
         context: ErrorContext,
     },
-    
+
     #[error("Internal server error: {message}")]
     Internal {
         message: String,
@@ -123,27 +123,27 @@ pub enum AppError {
         source: Option<Box<dyn std::error::Error + Send + Sync>>,
         context: ErrorContext,
     },
-    
+
     #[error("Bad request: {message}")]
     BadRequest {
         message: String,
         context: ErrorContext,
     },
-    
+
     #[error("Service temporarily unavailable: {message}")]
     ServiceUnavailable {
         message: String,
         retry_after: Option<u64>,
         context: ErrorContext,
     },
-    
+
     #[error("External service error: {service}")]
     ExternalService {
         service: String,
         message: String,
         context: ErrorContext,
     },
-    
+
     #[error("Configuration error: {message}")]
     Configuration {
         message: String,
@@ -175,7 +175,7 @@ impl AppError {
         let context = self.context();
         let correlation_id = &context.correlation_id;
         let error_msg = self.to_string();
-        
+
         match context.severity {
             ErrorSeverity::Low => {
                 info!(
@@ -224,16 +224,26 @@ impl AppError {
     fn error_response(&self) -> (StatusCode, Json<serde_json::Value>) {
         let context = self.context();
         let (status, code, user_message) = match self {
-            AppError::Database { .. } => {
-                (StatusCode::INTERNAL_SERVER_ERROR, "DATABASE_ERROR", "A database error occurred. Please try again later.")
-            }
-            AppError::Authentication { message, .. } => {
-                (StatusCode::UNAUTHORIZED, "AUTHENTICATION_ERROR", message.as_str())
-            }
-            AppError::Authorization { message, .. } => {
-                (StatusCode::FORBIDDEN, "AUTHORIZATION_ERROR", message.as_str())
-            }
-            AppError::Validation { message, field_errors, .. } => {
+            AppError::Database { .. } => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DATABASE_ERROR",
+                "A database error occurred. Please try again later.",
+            ),
+            AppError::Authentication { message, .. } => (
+                StatusCode::UNAUTHORIZED,
+                "AUTHENTICATION_ERROR",
+                message.as_str(),
+            ),
+            AppError::Authorization { message, .. } => (
+                StatusCode::FORBIDDEN,
+                "AUTHORIZATION_ERROR",
+                message.as_str(),
+            ),
+            AppError::Validation {
+                message,
+                field_errors,
+                ..
+            } => {
                 let response = if let Some(errors) = field_errors {
                     json!({
                         "error": {
@@ -256,9 +266,7 @@ impl AppError {
                 };
                 return (StatusCode::BAD_REQUEST, Json(response));
             }
-            AppError::NotFound { .. } => {
-                (StatusCode::NOT_FOUND, "NOT_FOUND", "Resource not found")
-            }
+            AppError::NotFound { .. } => (StatusCode::NOT_FOUND, "NOT_FOUND", "Resource not found"),
             AppError::Conflict { message, .. } => {
                 (StatusCode::CONFLICT, "CONFLICT", message.as_str())
             }
@@ -271,20 +279,26 @@ impl AppError {
                         "timestamp": chrono::Utc::now().to_rfc3339()
                     }
                 });
-                
+
                 if let Some(retry) = retry_after {
                     response["error"]["retry_after_seconds"] = json!(retry);
                 }
-                
+
                 return (StatusCode::TOO_MANY_REQUESTS, Json(response));
             }
-            AppError::Internal { .. } => {
-                (StatusCode::INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "An internal error occurred. Please try again later.")
-            }
+            AppError::Internal { .. } => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "INTERNAL_ERROR",
+                "An internal error occurred. Please try again later.",
+            ),
             AppError::BadRequest { message, .. } => {
                 (StatusCode::BAD_REQUEST, "BAD_REQUEST", message.as_str())
             }
-            AppError::ServiceUnavailable { message, retry_after, .. } => {
+            AppError::ServiceUnavailable {
+                message,
+                retry_after,
+                ..
+            } => {
                 let mut response = json!({
                     "error": {
                         "code": "SERVICE_UNAVAILABLE",
@@ -293,19 +307,27 @@ impl AppError {
                         "timestamp": chrono::Utc::now().to_rfc3339()
                     }
                 });
-                
+
                 if let Some(retry) = retry_after {
                     response["error"]["retry_after_seconds"] = json!(retry);
                 }
-                
+
                 return (StatusCode::SERVICE_UNAVAILABLE, Json(response));
             }
-            AppError::ExternalService { service: _, message, .. } => {
-                (StatusCode::BAD_GATEWAY, "EXTERNAL_SERVICE_ERROR", message.as_str())
-            }
-            AppError::Configuration { .. } => {
-                (StatusCode::INTERNAL_SERVER_ERROR, "CONFIGURATION_ERROR", "Service configuration error")
-            }
+            AppError::ExternalService {
+                service: _,
+                message,
+                ..
+            } => (
+                StatusCode::BAD_GATEWAY,
+                "EXTERNAL_SERVICE_ERROR",
+                message.as_str(),
+            ),
+            AppError::Configuration { .. } => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "CONFIGURATION_ERROR",
+                "Service configuration error",
+            ),
         };
 
         let body = Json(json!({
@@ -325,7 +347,7 @@ impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         // Log the error
         self.log();
-        
+
         // Return the response
         let (status, body) = self.error_response();
         (status, body).into_response()
@@ -378,7 +400,10 @@ impl AppError {
         }
     }
 
-    pub fn validation_with_fields(message: &str, field_errors: HashMap<String, Vec<String>>) -> Self {
+    pub fn validation_with_fields(
+        message: &str,
+        field_errors: HashMap<String, Vec<String>>,
+    ) -> Self {
         Self::Validation {
             message: message.to_string(),
             field_errors: Some(field_errors),
@@ -412,21 +437,22 @@ impl From<sqlx::Error> for AppError {
 impl From<validator::ValidationErrors> for AppError {
     fn from(errors: validator::ValidationErrors) -> Self {
         let mut field_errors = HashMap::new();
-        
+
         for (field, field_error_list) in errors.field_errors() {
             let messages: Vec<String> = field_error_list
                 .iter()
                 .map(|error| {
-                    error.message
+                    error
+                        .message
                         .as_ref()
                         .map(|msg| msg.to_string())
                         .unwrap_or_else(|| format!("Invalid value for field '{}'", field))
                 })
                 .collect();
-            
+
             field_errors.insert(field.to_string(), messages);
         }
-        
+
         AppError::validation_with_fields("Validation failed", field_errors)
     }
 }
@@ -440,9 +466,7 @@ impl From<anyhow::Error> for AppError {
 impl From<crate::service::jwt::Error> for AppError {
     fn from(err: crate::service::jwt::Error) -> Self {
         match err {
-            crate::service::jwt::Error::JWT(_) => {
-                AppError::auth_failed("Invalid or expired token")
-            }
+            crate::service::jwt::Error::JWT(_) => AppError::auth_failed("Invalid or expired token"),
             _ => AppError::internal(&err.to_string()),
         }
     }
@@ -460,9 +484,7 @@ impl From<crate::service::auth::Error> for AppError {
             crate::service::auth::Error::InvalidPassword => {
                 AppError::auth_failed("Invalid credentials")
             }
-            crate::service::auth::Error::WeakPassword(msg) => {
-                AppError::validation(&msg)
-            }
+            crate::service::auth::Error::WeakPassword(msg) => AppError::validation(&msg),
             crate::service::auth::Error::Sqlx(e) => AppError::database(e),
             _ => AppError::internal(&err.to_string()),
         }
@@ -473,27 +495,28 @@ impl From<crate::service::auth::Error> for AppError {
 pub type AppResult<T> = Result<T, AppError>;
 
 /// Error correlation middleware to add correlation IDs to requests
-pub async fn error_correlation_middleware(
-    mut request: Request,
-    next: Next,
-) -> Response {
+pub async fn error_correlation_middleware(mut request: Request, next: Next) -> Response {
     let correlation_id = Uuid::new_v4().to_string();
-    
+
     // Add correlation ID to request headers for downstream services
     request.headers_mut().insert(
         "x-correlation-id",
-        correlation_id.parse().unwrap_or_else(|_| "invalid".parse().unwrap())
+        correlation_id
+            .parse()
+            .unwrap_or_else(|_| "invalid".parse().unwrap()),
     );
-    
+
     let response = next.run(request).await;
-    
+
     // Add correlation ID to response headers
     let mut response = response;
     response.headers_mut().insert(
         "x-correlation-id",
-        correlation_id.parse().unwrap_or_else(|_| "invalid".parse().unwrap())
+        correlation_id
+            .parse()
+            .unwrap_or_else(|_| "invalid".parse().unwrap()),
     );
-    
+
     response
 }
 

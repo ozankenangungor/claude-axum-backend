@@ -46,9 +46,11 @@ impl Service {
     pub fn generate_token(&self, user: &User) -> Result<String, Error> {
         let expiration = Utc::now()
             .checked_add_signed(Duration::hours(24))
-            .ok_or_else(|| Error::JWT(jsonwebtoken::errors::Error::from(
-                jsonwebtoken::errors::ErrorKind::InvalidToken
-            )))?
+            .ok_or_else(|| {
+                Error::JWT(jsonwebtoken::errors::Error::from(
+                    jsonwebtoken::errors::ErrorKind::InvalidToken,
+                ))
+            })?
             .timestamp();
 
         let claims = Claims {

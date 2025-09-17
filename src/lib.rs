@@ -1,6 +1,9 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::error::error_correlation_middleware;
+use crate::monitoring::{error_tracking_middleware, request_metrics_middleware};
+use crate::rate_limiter::{auth_rate_limit_middleware, global_rate_limit_middleware};
 use axum::{
     extract::{Request, State},
     http::{self, header::CONTENT_TYPE, HeaderValue, StatusCode},
@@ -13,9 +16,6 @@ use tower_http::{
     compression::CompressionLayer, cors::CorsLayer, limit::RequestBodyLimitLayer,
     timeout::TimeoutLayer,
 };
-use crate::rate_limiter::{global_rate_limit_middleware, auth_rate_limit_middleware};
-use crate::monitoring::{request_metrics_middleware, error_tracking_middleware};
-use crate::error::error_correlation_middleware;
 use tracing::{error, info};
 pub mod config;
 pub mod db;
