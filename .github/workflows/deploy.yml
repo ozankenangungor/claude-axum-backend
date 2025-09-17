@@ -75,7 +75,6 @@ jobs:
     
     permissions:
       contents: read
-      id-token: write
 
     steps:
     - name: Checkout code
@@ -85,9 +84,7 @@ jobs:
       id: auth
       uses: 'google-github-actions/auth@v2'
       with:
-        project_id: '${{ env.PROJECT_ID }}'
-        service_account: 'github-actions@velvety-matter-471516-n4.iam.gserviceaccount.com'
-        workload_identity_provider: 'projects/364661851580/locations/global/workloadIdentityPools/github-actions-pool/providers/github-actions-provider'
+        credentials_json: '${{ secrets.GCP_SA_KEY }}'
 
     - name: Set up Cloud SDK
       uses: 'google-github-actions/setup-gcloud@v2'
