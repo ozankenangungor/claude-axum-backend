@@ -1,6 +1,6 @@
 # --- Stage 1: Builder ---
-# Rust derleme ortamını kur
-FROM rust:1.79 AS builder
+# Rust derleme ortamını kur - nightly edition2024 support için
+FROM rust:nightly AS builder
 
 # Çalışma dizinini oluştur
 WORKDIR /usr/src/app
