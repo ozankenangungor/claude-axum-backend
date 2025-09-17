@@ -256,7 +256,7 @@ impl AppError {
                 };
                 return (StatusCode::BAD_REQUEST, Json(response));
             }
-            AppError::NotFound { resource, .. } => {
+            AppError::NotFound { .. } => {
                 (StatusCode::NOT_FOUND, "NOT_FOUND", "Resource not found")
             }
             AppError::Conflict { message, .. } => {
@@ -303,7 +303,7 @@ impl AppError {
             AppError::ExternalService { service: _, message, .. } => {
                 (StatusCode::BAD_GATEWAY, "EXTERNAL_SERVICE_ERROR", message.as_str())
             }
-            AppError::Configuration { message, .. } => {
+            AppError::Configuration { .. } => {
                 (StatusCode::INTERNAL_SERVER_ERROR, "CONFIGURATION_ERROR", "Service configuration error")
             }
         };
