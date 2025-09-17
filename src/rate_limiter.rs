@@ -1,12 +1,7 @@
 // Simple rate limiting using tower-http built-in features
 // For production, consider using external services like Redis for distributed rate limiting
 
-use axum::{
-    extract::Request,
-    http::StatusCode,
-    middleware::Next,
-    response::Response,
-};
+use axum::{extract::Request, http::StatusCode, middleware::Next, response::Response};
 use std::{
     collections::HashMap,
     net::IpAddr,
@@ -42,7 +37,7 @@ impl SimpleRateLimiter {
         };
 
         let ip_requests = requests.entry(ip).or_insert_with(Vec::new);
-        
+
         // Remove old requests outside the window
         ip_requests.retain(|&timestamp| now.duration_since(timestamp) < self.window_duration);
 
@@ -63,9 +58,7 @@ pub async fn global_rate_limit_middleware(
     next: Next,
 ) -> Result<Response, StatusCode> {
     static RATE_LIMITER: std::sync::OnceLock<SimpleRateLimiter> = std::sync::OnceLock::new();
-    let limiter = RATE_LIMITER.get_or_init(|| {
-        SimpleRateLimiter::new(100, Duration::from_secs(60))
-    });
+    let limiter = RATE_LIMITER.get_or_init(|| SimpleRateLimiter::new(100, Duration::from_secs(60)));
 
     // Extract IP address from headers (Cloud Run uses X-Forwarded-For)
     let client_ip = request
@@ -78,7 +71,7 @@ pub async fn global_rate_limit_middleware(
             info!("No client IP found in headers, using localhost fallback");
             std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)
         });
-    
+
     if !limiter.is_allowed(client_ip) {
         warn!("Global rate limit exceeded for IP: {}", client_ip);
         return Err(StatusCode::TOO_MANY_REQUESTS);
@@ -110,7 +103,7 @@ pub async fn auth_rate_limit_middleware(
             info!("No client IP found in auth headers, using localhost fallback");
             std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)
         });
-    
+
     if !limiter.is_allowed(client_ip) {
         warn!("Auth rate limit exceeded for IP: {}", client_ip);
         return Err(StatusCode::TOO_MANY_REQUESTS);
