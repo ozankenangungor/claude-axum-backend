@@ -6,6 +6,7 @@
 FROM --platform=linux/amd64 rust:1.89-bookworm AS builder
 
 # Install build dependencies and cargo-chef in one layer
+# libclang-dev'i buraya ekliyoruz.
 RUN apt-get update && apt-get install -y \
     pkg-config \
     libssl-dev \
@@ -13,30 +14,25 @@ RUN apt-get update && apt-get install -y \
     libclang-dev \
     && rm -rf /var/lib/apt/lists/* \
     && cargo install cargo-chef
+
 WORKDIR /usr/src/app
 
-# --- Dependency Caching with cargo-chef ---
-# First, copy only the files required to calculate dependencies
+# --- Dependency Caching with cargo-chef (Doğru Yöntem) ---
+
+# Sadece Cargo.toml'ı kopyalayarak bağımlılıkları önbelleğe al
 COPY Cargo.toml Cargo.lock ./
-COPY .sqlx ./.sqlx
-COPY migrations ./migrations
-# Copying src is needed to understand all dependencies, including binary-specific ones
-COPY src ./src 
 
-# 1. Prepare the build recipe
+# Bağımlılıkları derle
 RUN cargo chef prepare --recipe-path recipe.json
-
-# 2. Cook (build) the dependencies. This layer will be cached heavily.
 RUN cargo chef cook --release --recipe-path recipe.json
 
-# --- Actual Build ---
-# 3. Copy the rest of the source code and build the final application
+# Şimdi uygulamanın geri kalanını kopyala ve derle
 COPY . .
 RUN cargo build --release
 
 # ----------------------------------------------------------------
 # Stage 2: Minimal runtime image
-# Using "bookworm-slim" for consistency and security
+# (Bu kısım aynı kalabilir, değişiklik yok)
 # --- Final Runtime Stage ---
 FROM debian:bookworm-slim AS production
 
@@ -56,7 +52,6 @@ COPY --from=builder /usr/src/app/target/release/todo_api /usr/local/bin/todo_api
 COPY --from=builder /usr/src/app/target/release/migrate /usr/local/bin/migrate
 
 # Change ownership to non-root user
-# If you don't need the migrate binary in production, you can remove this line.
 RUN chown appuser:appuser /usr/local/bin/todo_api && \
     chown appuser:appuser /usr/local/bin/migrate
 
@@ -66,8 +61,7 @@ USER appuser
 # Set default environment variables
 ENV RUST_LOG=info
 
-# Cloud Run will set the PORT environment variable
-# Expose port (Cloud Run ignores this anyway)
+# Expose port
 EXPOSE 8080
 
 # Run the application
