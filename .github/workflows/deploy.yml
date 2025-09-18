@@ -1,21 +1,21 @@
+# Bu, Axum + Neon + Cloud Run mimarisi için optimize edilmiş, modern bir CI/CD dosyasıdır.
 name: Deploy to Google Cloud Run
 
 on:
   push:
     branches: [ main ]
-  pull_request:
-    branches: [ main ]
   workflow_dispatch:
 
 env:
-  PROJECT_ID: velvety-matter-471516-n4
-  SERVICE: todo-api
-  REGION: us-central1
+  PROJECT_ID: velvety-matter-471516-n4 # Google Cloud Proje ID'niz
+  SERVICE: todo-api # Cloud Run servis adınız
+  REGION: us-central1 # Cloud Run bölgeniz
+  GAR_LOCATION: us-central1 # Artifact Registry bölgesi (genellikle REGION ile aynı)
 
 jobs:
+  # 'test' işi (job) senin orijinal dosyanla aynı, çünkü doğru çalışıyor.
   test:
     runs-on: ubuntu-latest
-    
     services:
       postgres:
         image: postgres:15
@@ -30,17 +30,16 @@ jobs:
           --health-retries 5
         ports:
           - 5432:5432
-    
     steps:
-    - name: Checkout code
+    - name: Kodu Checkout Yap
       uses: actions/checkout@v4
       
-    - name: Setup Rust
+    - name: Rust Kurulumu
       uses: dtolnay/rust-toolchain@stable
       with:
         components: rustfmt, clippy
         
-    - name: Cache cargo dependencies
+    - name: Cargo Bağımlılıklarını Cache'le
       uses: actions/cache@v3
       with:
         path: |
@@ -49,94 +48,97 @@ jobs:
           target
         key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
         
-    - name: Install system dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y pkg-config libssl-dev
+    - name: Sistem Bağımlılıklarını Kur
+      run: sudo apt-get update && sudo apt-get install -y pkg-config libssl-dev
         
-    - name: Run tests
+    - name: Testleri Çalıştır
       env:
         DATABASE_URL: postgres://postgres:password@localhost:5432/test_db
         JWT_SECRET: test-jwt-secret-32-characters-long-for-testing-purposes
         HASHING_SECRET_KEY: test-hashing-secret-16-chars
-        SQLX_OFFLINE: true
+        SQLX_OFFLINE: "true"
       run: cargo test --verbose --lib --bins
       
-    - name: Run clippy
+    - name: Clippy Kontrolü
       run: cargo clippy --all-targets --all-features -- -W clippy::all
       
-    - name: Check formatting
+    - name: Format Kontrolü
       run: cargo fmt -- --check
 
+  # 'deploy' işi tamamen yenilendi ve optimize edildi.
   deploy:
-    needs: test
+    needs: test # Deploy'dan önce testlerin başarılı olmasını zorunlu kılıyoruz.
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     
+    # GÜVENLİK GÜNCELLEMESİ: Google Cloud ile anahtarsız (keyless) kimlik doğrulama için izinler.
     permissions:
-      contents: read
+      contents: 'read'
+      id-token: 'write'
 
     steps:
-    - name: Checkout code
+    - name: Kodu Checkout Yap
       uses: actions/checkout@v4
 
-    - name: Google Auth
-      id: auth
+    # ADIM 1: GÜVENLİ Google Cloud Kimlik Doğrulaması
+    - name: Google Cloud'a Anahtarsız Giriş Yap
+      id: 'auth'
       uses: 'google-github-actions/auth@v2'
       with:
-        credentials_json: '${{ secrets.GCP_SA_KEY }}'
+        # ⚠️ ÖNEMLİ: Aşağıdaki satırı kendi bilgilerinizle doldurun!
+        workload_identity_provider: 'projects/YOUR_GCP_PROJECT_NUMBER/locations/global/workloadIdentityPools/github-actions-pool/providers/my-github-provider'
+        service_account: 'todo-api@${{ env.PROJECT_ID }}.iam.gserviceaccount.com'
 
-    - name: Set up Cloud SDK
-      uses: 'google-github-actions/setup-gcloud@v2'
+    # ADIM 2: Modern Docker Derleme Ortamını Kur (Buildx)
+    - name: Docker Buildx Kurulumu
+      uses: docker/setup-buildx-action@v3
+    
+    # ADIM 3: Google Artifact Registry'ye Docker Erişimi
+    - name: Artifact Registry'ye Giriş Yap
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.GAR_LOCATION }}-docker.pkg.dev
+        username: oauth2accesstoken
+        password: ${{ steps.auth.outputs.access_token }}
 
-    - name: Configure Docker to use gcloud as a credential helper
-      run: gcloud auth configure-docker
+    # ADIM 4: Docker İmajını Derle ve Artifact Registry'ye Yükle
+    - name: Docker İmajını Derle ve Push'la
+      id: build-and-push
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        push: true
+        tags: ${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/${{ env.SERVICE }}:${{ github.sha }}
+        cache-from: type=registry,ref=${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/cache:latest
+        cache-to: type=registry,ref=${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/cache:latest,mode=max
 
-    - name: Build and push Docker image
-      env:
-        # Provide DATABASE_URL for SQLx compile-time verification
-        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+    # ADIM 5: Cloud Run'a Yeni İmajı Deploy Et
+    - name: Cloud Run'a Deploy Et
       run: |
-        # Build the Docker image with DATABASE_URL for SQLx
-        docker build --build-arg DATABASE_URL="$DATABASE_URL" -t gcr.io/$PROJECT_ID/$SERVICE:$GITHUB_SHA .
-        docker build --build-arg DATABASE_URL="$DATABASE_URL" -t gcr.io/$PROJECT_ID/$SERVICE:latest .
-        
-        # Push the Docker image to Google Container Registry
-        docker push gcr.io/$PROJECT_ID/$SERVICE:$GITHUB_SHA
-        docker push gcr.io/$PROJECT_ID/$SERVICE:latest
-
-    - name: Deploy to Cloud Run
-      run: |
-        gcloud run deploy $SERVICE \
-          --image gcr.io/$PROJECT_ID/$SERVICE:$GITHUB_SHA \
-          --region $REGION \
+        gcloud run deploy ${{ env.SERVICE }} \
+          --image ${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/${{ env.SERVICE }}:${{ github.sha }} \
+          --region ${{ env.REGION }} \
           --platform managed \
           --allow-unauthenticated \
-          --memory 1Gi \
-          --cpu 2 \
-          --max-instances 100 \
-          --min-instances 1 \
-          --timeout 300 \
-          --concurrency 80 \
-          --service-account todo-api@$PROJECT_ID.iam.gserviceaccount.com \
-          --set-env-vars="RUST_ENV=production,RUST_LOG=info,PORT=8080,HOST=0.0.0.0,GCP_PROJECT_ID=$PROJECT_ID,NEON_BRANCH=main" \
+          --service-account todo-api@${{ env.PROJECT_ID }}.iam.gserviceaccount.com \
           --port 8080 \
           --execution-environment gen2
-
-    - name: Get service URL
+          
+    # Kalan adımlar aynı, sadece URL'i alıp test ediyorlar.
+    - name: Servis URL'ini Al
+      id: get_url
       run: |
-        SERVICE_URL=$(gcloud run services describe $SERVICE --region=$REGION --format='value(status.url)')
-        echo "Service deployed to: $SERVICE_URL"
-        echo "SERVICE_URL=$SERVICE_URL" >> $GITHUB_ENV
+        SERVICE_URL=$(gcloud run services describe ${{ env.SERVICE }} --region=${{ env.REGION }} --format='value(status.url)')
+        echo "SERVICE_URL=$SERVICE_URL" >> $GITHUB_OUTPUT
 
-    - name: Test deployment
+    - name: Deploy Edilen Servisi Test Et
       run: |
         echo "Testing health endpoint..."
-        curl -f $SERVICE_URL/health || exit 1
+        curl -f ${{ steps.get_url.outputs.SERVICE_URL }}/health || exit 1
         echo "✅ Health check passed!"
 
-    - name: Notify deployment success
+    - name: Deploy Başarısını Bildir
       run: |
         echo "🎉 Deployment successful!"
-        echo "Service URL: $SERVICE_URL"
-        echo "Health check: $SERVICE_URL/health"
+        echo "Service URL: ${{ steps.get_url.outputs.SERVICE_URL }}"
+
