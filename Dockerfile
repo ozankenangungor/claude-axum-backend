@@ -6,6 +6,15 @@ FROM rust:1.81 AS builder
 RUN rustup toolchain install nightly
 RUN rustup default nightly
 
+# Install build dependencies for argonautica (libclang) and other native deps
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    libclang-dev \
+    clang \
+    llvm-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 # Çalışma dizinini oluştur
 WORKDIR /usr/src/app
 
