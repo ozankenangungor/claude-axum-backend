@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 env:
-  PROJECT_ID: velvety-matter-471516-n4 # Google Cloud Proje ID'niz
+  PROJECT_ID: 364661851580 # Google Cloud Proje ID'niz
   SERVICE: todo-api # Cloud Run servis adınız
   REGION: us-central1 # Cloud Run bölgeniz
   GAR_LOCATION: us-central1 # Artifact Registry bölgesi (genellikle REGION ile aynı)
@@ -57,6 +57,7 @@ jobs:
         JWT_SECRET: test-jwt-secret-32-characters-long-for-testing-purposes
         HASHING_SECRET_KEY: test-hashing-secret-16-chars
         SQLX_OFFLINE: "true"
+        PROJECT_ID: 364661851580
       run: cargo test --verbose --lib --bins
       
     - name: Clippy Kontrolü
