@@ -16,47 +16,41 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /usr/src/app
 
 # --- Dependency Caching with cargo-chef ---
-# First, copy only the files required to calculate dependencies
-COPY Cargo.toml Cargo.lock ./
-COPY .sqlx ./.sqlx
-COPY migrations ./migrations
-# Copying src is needed to understand all dependencies, including binary-specific ones
-COPY src ./src 
 
-# 1. Prepare the build recipe
+# 1. Prepare the build recipe. Sadece bağımlılıkları hesaplamak için gereken dosyaları kopyala.
+COPY Cargo.toml Cargo.lock ./
 RUN cargo chef prepare --recipe-path recipe.json
 
-# 2. Cook (build) the dependencies. This layer will be cached heavily.
+# 2. Cook (build) the dependencies. Bu katman, bağımlılıklar değişmediği sürece cache'lenecek.
 RUN cargo chef cook --release --recipe-path recipe.json
 
 # --- Actual Build ---
-# 3. Copy the rest of the source code and build the final application
-COPY . .
-RUN cargo build --release
+
+# 3. Şimdi asıl kaynak kodunu kopyala ve sadece kendi kodunu derle.
+# Bağımlılıklar zaten cache'de olduğu için bu adım çok hızlı olacak.
+COPY src ./src
+COPY migrations ./migrations
+COPY .sqlx ./.sqlx
+# Varsa diğer kod dosyaları (örn: build.rs)
+COPY build.rs ./build.rs
+RUN cargo build --release --bin todo_api --bin migrate
 
 # ----------------------------------------------------------------
 # Stage 2: Minimal runtime image
 # Using "bookworm-slim" for consistency and security
-# --- Final Runtime Stage ---
 FROM debian:bookworm-slim AS production
 
 # Create non-root user for security
 RUN groupadd -r appuser && useradd -r -g appuser appuser
 
-# Install runtime dependencies with security updates
-RUN apt-get update && apt-get install -y \
-    ca-certificates \
-    && apt-get upgrade -y \
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
 
 # Copy the built binaries from the builder stage
-# Your Cargo.toml defines two binaries: todo_api and migrate.
-COPY --from=builder /usr/src/app/target/release/todo_api /usr/local/bin/todo_api
-COPY --from=builder /usr/src/app/target/release/migrate /usr/local/bin/migrate
+COPY --from=builder /usr/src/app/target/release/todo_api /usr/local/bin/
+COPY --from=builder /usr/src/app/target/release/migrate /usr/local/bin/
 
 # Change ownership to non-root user
-# If you don't need the migrate binary in production, you can remove this line.
 RUN chown appuser:appuser /usr/local/bin/todo_api && \
     chown appuser:appuser /usr/local/bin/migrate
 
@@ -66,8 +60,7 @@ USER appuser
 # Set default environment variables
 ENV RUST_LOG=info
 
-# Cloud Run will set the PORT environment variable
-# Expose port (Cloud Run ignores this anyway)
+# Expose port (Cloud Run will set the PORT)
 EXPOSE 8080
 
 # Run the application
