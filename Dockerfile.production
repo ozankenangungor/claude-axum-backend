@@ -2,10 +2,9 @@
 # ----------------------------------------------------------------
 
 # Stage 1: Build environment with cargo-chef
-# Using "bookworm" for a more secure and up-to-date base OS
 FROM --platform=linux/amd64 rust:1.89-bookworm AS builder
 
-# Install build dependencies and cargo-chef in one layer
+# Install build dependencies and cargo-chef
 RUN apt-get update && apt-get install -y \
     pkg-config \
     libssl-dev \
@@ -17,27 +16,29 @@ WORKDIR /usr/src/app
 
 # --- Dependency Caching with cargo-chef ---
 
-# 1. Prepare the build recipe. Sadece bağımlılıkları hesaplamak için gereken dosyaları kopyala.
+# 1. Prepare the build recipe. 
+# Bağımlılıkları etkileyen TÜM dosyaları bu adımda kopyala.
+# SQLx, sorguları bulmak için 'src' ve önbelleği bulmak için '.sqlx' klasörüne ihtiyaç duyar.
 COPY Cargo.toml Cargo.lock ./
+COPY src ./src
+COPY .sqlx ./.sqlx
+COPY migrations ./migrations
+# Varsa build.rs'i de ekle
+COPY build.rs ./build.rs
 RUN cargo chef prepare --recipe-path recipe.json
 
-# 2. Cook (build) the dependencies. Bu katman, bağımlılıklar değişmediği sürece cache'lenecek.
+# 2. Cook (build) the dependencies. Bu katman, bağımlılıklar değişmediği sürece cache'lenir.
 RUN cargo chef cook --release --recipe-path recipe.json
 
 # --- Actual Build ---
 
-# 3. Şimdi asıl kaynak kodunu kopyala ve sadece kendi kodunu derle.
-# Bağımlılıklar zaten cache'de olduğu için bu adım çok hızlı olacak.
-COPY src ./src
-COPY migrations ./migrations
-COPY .sqlx ./.sqlx
-# Varsa diğer kod dosyaları (örn: build.rs)
-COPY build.rs ./build.rs
+# 3. Kodu tekrar kopyalamaya gerek yok, zaten hepsi burada.
+# Sadece kendi projemizi, önceden derlenmiş bağımlılıkları kullanarak derle.
+# Bu adım, sadece kendi kodun değiştiğinde çok hızlı çalışacaktır.
 RUN cargo build --release --bin todo_api --bin migrate
 
 # ----------------------------------------------------------------
 # Stage 2: Minimal runtime image
-# Using "bookworm-slim" for consistency and security
 FROM debian:bookworm-slim AS production
 
 # Create non-root user for security
@@ -57,11 +58,6 @@ RUN chown appuser:appuser /usr/local/bin/todo_api && \
 # Switch to non-root user
 USER appuser
 
-# Set default environment variables
 ENV RUST_LOG=info
-
-# Expose port (Cloud Run will set the PORT)
 EXPOSE 8080
-
-# Run the application
 CMD ["todo_api"]
