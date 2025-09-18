@@ -23,6 +23,8 @@ COPY Cargo.toml Cargo.lock ./
 
 # Dummy bir main.rs oluşturarak sadece bağımlılıkları derle
 RUN mkdir src && echo "fn main() {}" > src/main.rs
+# Set SQLX_OFFLINE to skip compile-time query verification
+ENV SQLX_OFFLINE=true
 RUN cargo build --release
 
 # Şimdi asıl kodumuzu kopyala
@@ -37,6 +39,8 @@ COPY sqlx-data.json* ./
 
 # Uygulamayı release modunda derle
 RUN rm -f target/release/deps/todo_api*
+# Keep SQLX_OFFLINE for final build too
+ENV SQLX_OFFLINE=true
 RUN cargo build --release
 
 # --- Stage 2: Final Image ---
