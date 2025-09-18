@@ -86,7 +86,7 @@ jobs:
       uses: 'google-github-actions/auth@v2'
       with:
         # ⚠️ ÖNEMLİ: Aşağıdaki satırı kendi bilgilerinizle doldurun!
-        workload_identity_provider: 'projects/YOUR_GCP_PROJECT_NUMBER/locations/global/workloadIdentityPools/github-actions-pool/providers/my-github-provider'
+        workload_identity_provider: 'projects/364661851580/locations/global/workloadIdentityPools/github-actions-pool/providers/my-github-provider'
         service_account: 'todo-api@${{ env.PROJECT_ID }}.iam.gserviceaccount.com'
 
     # ADIM 2: Modern Docker Derleme Ortamını Kur (Buildx)
