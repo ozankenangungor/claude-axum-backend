@@ -15,6 +15,10 @@ RUN apt-get update && apt-get install -y \
     llvm-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# Accept DATABASE_URL as build argument for SQLx compile-time verification
+ARG DATABASE_URL
+ENV DATABASE_URL=$DATABASE_URL
+
 # Çalışma dizinini oluştur
 WORKDIR /usr/src/app
 
@@ -23,8 +27,7 @@ COPY Cargo.toml Cargo.lock ./
 
 # Dummy bir main.rs oluşturarak sadece bağımlılıkları derle
 RUN mkdir src && echo "fn main() {}" > src/main.rs
-# Set SQLX_OFFLINE to skip compile-time query verification
-ENV SQLX_OFFLINE=true
+# Use DATABASE_URL for SQLx compile-time verification (no offline mode needed)
 RUN cargo build --release
 
 # Şimdi asıl kodumuzu kopyala
@@ -39,8 +42,7 @@ COPY sqlx-data.json* ./
 
 # Uygulamayı release modunda derle
 RUN rm -f target/release/deps/todo_api*
-# Keep SQLX_OFFLINE for final build too
-ENV SQLX_OFFLINE=true
+# DATABASE_URL already set from build arg for SQLx verification
 RUN cargo build --release
 
 # --- Stage 2: Final Image ---

@@ -93,10 +93,13 @@ jobs:
       run: gcloud auth configure-docker
 
     - name: Build and push Docker image
+      env:
+        # Provide DATABASE_URL for SQLx compile-time verification
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
       run: |
-        # Build the Docker image
-        docker build -t gcr.io/$PROJECT_ID/$SERVICE:$GITHUB_SHA .
-        docker build -t gcr.io/$PROJECT_ID/$SERVICE:latest .
+        # Build the Docker image with DATABASE_URL for SQLx
+        docker build --build-arg DATABASE_URL="$DATABASE_URL" -t gcr.io/$PROJECT_ID/$SERVICE:$GITHUB_SHA .
+        docker build --build-arg DATABASE_URL="$DATABASE_URL" -t gcr.io/$PROJECT_ID/$SERVICE:latest .
         
         # Push the Docker image to Google Container Registry
         docker push gcr.io/$PROJECT_ID/$SERVICE:$GITHUB_SHA
