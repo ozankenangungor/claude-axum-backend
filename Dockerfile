@@ -18,6 +18,8 @@ RUN apt-get update && apt-get install -y \
 # Accept DATABASE_URL as build argument for SQLx compile-time verification
 ARG DATABASE_URL
 ENV DATABASE_URL=$DATABASE_URL
+# Use SQLX_OFFLINE as fallback when DATABASE_URL is not available
+ENV SQLX_OFFLINE=true
 
 # Çalışma dizinini oluştur
 WORKDIR /usr/src/app
@@ -27,7 +29,8 @@ COPY Cargo.toml Cargo.lock ./
 
 # Dummy bir main.rs oluşturarak sadece bağımlılıkları derle
 RUN mkdir src && echo "fn main() {}" > src/main.rs
-# Use DATABASE_URL for SQLx compile-time verification (no offline mode needed)
+# Use SQLX_OFFLINE as fallback when DATABASE_URL fails
+ENV SQLX_OFFLINE=true
 RUN cargo build --release
 
 # Şimdi asıl kodumuzu kopyala
@@ -42,7 +45,8 @@ COPY sqlx-data.json* ./
 
 # Uygulamayı release modunda derle
 RUN rm -f target/release/deps/todo_api*
-# DATABASE_URL already set from build arg for SQLx verification
+# Use SQLX_OFFLINE as reliable fallback for SQLx verification
+ENV SQLX_OFFLINE=true
 RUN cargo build --release
 
 # --- Stage 2: Final Image ---

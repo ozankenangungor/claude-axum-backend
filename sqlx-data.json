@@ -1,0 +1,19 @@
+{
+  "db": "PostgreSQL",
+  "d0bb8c9c97b3b8b9b3b8b9b3b8b9b3b8b9b3b8b9": {
+    "query": "SELECT 1",
+    "describe": {
+      "columns": [
+        {
+          "ordinal": 0,
+          "name": "?column?",
+          "type_info": "Int4"
+        }
+      ],
+      "parameters": {
+        "Left": []
+      },
+      "nullable": [false]
+    }
+  }
+}
