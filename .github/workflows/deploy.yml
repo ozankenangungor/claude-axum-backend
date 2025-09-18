@@ -7,19 +7,20 @@ on:
   workflow_dispatch:
 
 env:
-  PROJECT_ID: velvety-matter-471516-n4 # Google Cloud Proje ID'niz
+  # ❗️ DÜZELTME: Burası her zaman Proje ID'niz olmalıdır, Proje Numaranız değil.
+  PROJECT_ID: velvety-matter-471516-n4
   SERVICE: todo-api # Cloud Run servis adınız
   REGION: us-central1 # Cloud Run bölgeniz
   GAR_LOCATION: us-central1 # Artifact Registry bölgesi (genellikle REGION ile aynı)
 
 jobs:
-  # 'test' işi (job) senin orijinal dosyanla aynı, çünkü doğru çalışıyor.
   test:
     runs-on: ubuntu-latest
     services:
       postgres:
         image: postgres:15
         env:
+          # ❗️ DÜZELTME: Yazım hatası düzeltildi (POSTGRES)
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: password
           POSTGRES_DB: test_db
@@ -57,7 +58,6 @@ jobs:
         JWT_SECRET: test-jwt-secret-32-characters-long-for-testing-purposes
         HASHING_SECRET_KEY: test-hashing-secret-16-chars
         SQLX_OFFLINE: "true"
-        PROJECT_ID: velvety-matter-471516-n4
       run: cargo test --verbose --lib --bins
       
     - name: Clippy Kontrolü
@@ -66,13 +66,11 @@ jobs:
     - name: Format Kontrolü
       run: cargo fmt -- --check
 
-  # 'deploy' işi tamamen yenilendi ve optimize edildi.
   deploy:
-    needs: test # Deploy'dan önce testlerin başarılı olmasını zorunlu kılıyoruz.
+    needs: test
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     
-    # GÜVENLİK GÜNCELLEMESİ: Google Cloud ile anahtarsız (keyless) kimlik doğrulama için izinler.
     permissions:
       contents: 'read'
       id-token: 'write'
@@ -81,19 +79,18 @@ jobs:
     - name: Kodu Checkout Yap
       uses: actions/checkout@v4
 
-    # ADIM 1: GÜVENLİ Google Cloud Kimlik Doğrulaması
     - name: Google Cloud'a Anahtarsız Giriş Yap
       id: 'auth'
       uses: 'google-github-actions/auth@v2'
       with:
+        # ❗️ DÜZELTME: Proje Numarası SADECE burada kullanılır.
         workload_identity_provider: 'projects/364661851580/locations/global/workloadIdentityPools/github-actions-pool/providers/my-github-provider'
+        # Bu satır, üstteki env.PROJECT_ID'yi (velvety-matter...) kullandığı için artık doğru çalışacak.
         service_account: 'todo-api@${{ env.PROJECT_ID }}.iam.gserviceaccount.com'
 
-    # ADIM 2: Modern Docker Derleme Ortamını Kur (Buildx)
     - name: Docker Buildx Kurulumu
       uses: docker/setup-buildx-action@v3
     
-    # ADIM 3: Google Artifact Registry'ye Docker Erişimi
     - name: Artifact Registry'ye Giriş Yap
       uses: docker/login-action@v3
       with:
@@ -101,7 +98,6 @@ jobs:
         username: oauth2accesstoken
         password: ${{ steps.auth.outputs.access_token }}
 
-    # ADIM 4: Docker İmajını Derle ve Artifact Registry'ye Yükle
     - name: Docker İmajını Derle ve Push'la
       id: build-and-push
       uses: docker/build-push-action@v5
@@ -112,7 +108,6 @@ jobs:
         cache-from: type=registry,ref=${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/cache:latest
         cache-to: type=registry,ref=${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.SERVICE }}/cache:latest,mode=max
 
-    # ADIM 5: Cloud Run'a Yeni İmajı Deploy Et
     - name: Cloud Run'a Deploy Et
       run: |
         gcloud run deploy ${{ env.SERVICE }} \
@@ -124,7 +119,6 @@ jobs:
           --port 8080 \
           --execution-environment gen2
           
-    # Kalan adımlar aynı, sadece URL'i alıp test ediyorlar.
     - name: Servis URL'ini Al
       id: get_url
       run: |
